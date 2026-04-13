@@ -59,7 +59,7 @@ const paymentCache = new Map();
  * x402 Payment Gate middleware.
  * Mount on /v1 routes after auth middleware.
  */
-export default function x402Middleware(req, res, next) {
+export default async function x402Middleware(req, res, next) {
   // Track utilization regardless of payment status
   recordRequest();
 
@@ -75,16 +75,25 @@ export default function x402Middleware(req, res, next) {
 
   // 3. Check for valid Stripe subscription
   const subscriptionId = req.headers['x-subscription-id'];
-  if (subscriptionId && isValidSubscription(subscriptionId)) {
-    req.paymentMethod = 'stripe_subscription';
-    req.subscriptionId = subscriptionId;
-    return next();
+  if (subscriptionId) {
+    const valid = await isValidSubscription(subscriptionId);
+    if (valid) {
+      req.paymentMethod = 'stripe_subscription';
+      req.subscriptionId = subscriptionId;
+      return next();
+    }
+    return res.status(402).json({
+      success: false,
+      error: 'Subscription verification failed',
+      code: 'SUBSCRIPTION_INVALID',
+      hint: 'Ensure the subscription ID is for an active Stripe subscription.',
+    });
   }
 
   // 4. Check for x402 payment proof
   const paymentHash = req.headers['x-payment-hash'];
   if (paymentHash) {
-    const verification = verifyPayment(paymentHash);
+    const verification = await verifyPayment(paymentHash);
     if (verification.valid) {
       req.paymentMethod = 'x402';
       req.paymentHash = paymentHash;
@@ -159,17 +168,19 @@ export default function x402Middleware(req, res, next) {
   });
 }
 
+// ─── Configuration ────────────────────────────────────────────
+
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
+const BASE_RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
+const USDC_CONTRACT = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'; // USDC on Base L2
+
 // ─── Payment Verification ────────────────────────────────────
 
 /**
- * Verify a payment hash.
- * In production, this queries the Base network via CDP SDK.
- * For now, we support:
- *   - Cached verified payments
- *   - Test payment hashes (prefixed with 'test_')
- *   - TODO: On-chain verification via ethers/CDP
+ * Verify a payment hash on Base L2.
+ * Queries the chain via public RPC to confirm USDC transfer.
  */
-function verifyPayment(hash) {
+async function verifyPayment(hash) {
   // Check cache first
   if (paymentCache.has(hash)) {
     const cached = paymentCache.get(hash);
@@ -179,36 +190,64 @@ function verifyPayment(hash) {
     return { valid: false, reason: 'Payment previously rejected' };
   }
 
-  // Accept test payments in non-production (for development)
-  if (hash.startsWith('test_pay_') && process.env.NODE_ENV !== 'production') {
-    const amount = parseFloat(hash.split('_').pop()) || 0.001;
-    paymentCache.set(hash, { verified: true, amount, timestamp: Date.now() });
-    return { valid: true, amount };
+  if (!PAYMENT_ADDRESS || PAYMENT_ADDRESS === '0x0000000000000000000000000000000000000000') {
+    return { valid: false, reason: 'Payment address not configured on server' };
   }
 
-  // TODO: On-chain verification via CDP SDK
-  // const tx = await cdpClient.getTransaction(hash);
-  // if (tx.to === PAYMENT_ADDRESS && tx.value >= expectedAmount) { ... }
+  try {
+    const receiptRes = await fetch(BASE_RPC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1,
+        method: 'eth_getTransactionReceipt',
+        params: [hash],
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const { result: receipt } = await receiptRes.json();
+    if (!receipt || receipt.status !== '0x1') {
+      return { valid: false, reason: 'Transaction not found or failed on Base L2' };
+    }
 
-  return { valid: false, reason: 'Payment hash not found. Ensure the transaction is confirmed on the Base network.' };
+    const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+    const payAddr = PAYMENT_ADDRESS.toLowerCase();
+
+    for (const log of receipt.logs) {
+      if (log.address.toLowerCase() !== USDC_CONTRACT.toLowerCase()) continue;
+      if (log.topics[0] !== TRANSFER_TOPIC) continue;
+      const recipient = '0x' + log.topics[2].slice(26).toLowerCase();
+      if (recipient !== payAddr) continue;
+      const amountRaw = parseInt(log.data, 16);
+      const amountUsdc = amountRaw / 1_000_000;
+      paymentCache.set(hash, { verified: true, amount: amountUsdc, timestamp: Date.now() });
+      return { valid: true, amount: amountUsdc };
+    }
+    return { valid: false, reason: 'No USDC transfer to Hive payment address found in transaction' };
+  } catch (err) {
+    console.error('[x402] On-chain verification error:', err.message);
+    return { valid: false, reason: 'Chain verification error — try again' };
+  }
 }
 
 /**
- * Validate a Stripe subscription ID.
- * In production, this calls the Stripe API.
- * For now, accepts any non-empty string as valid in dev mode.
+ * Validate a Stripe subscription ID against the Stripe API.
  */
-function isValidSubscription(subscriptionId) {
-  // Accept test subscriptions in non-production
-  if (subscriptionId.startsWith('sub_test_') && process.env.NODE_ENV !== 'production') {
-    return true;
+async function isValidSubscription(subscriptionId) {
+  if (!STRIPE_SECRET_KEY || !STRIPE_SECRET_KEY.startsWith('sk_live_')) {
+    return false;
   }
-
-  // TODO: Stripe API verification
-  // const sub = await stripe.subscriptions.retrieve(subscriptionId);
-  // return sub.status === 'active';
-
-  return false;
+  try {
+    const res = await fetch(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
+      headers: { 'Authorization': `Bearer ${STRIPE_SECRET_KEY}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return false;
+    const sub = await res.json();
+    return sub.status === 'active' || sub.status === 'trialing';
+  } catch {
+    return false;
+  }
 }
 
 /**
