@@ -8,7 +8,6 @@
  */
 
 import { Router } from 'express';
-import Stripe from 'stripe';
 import {
   getApiCallPrice,
   getInsurancePremium,
@@ -18,17 +17,17 @@ import {
 } from '../services/pricing-engine.js';
 import { paymentCache } from '../middleware/x402.js';
 
-// ─── Stripe Client ──────────────────────────────────────────
+// ─── Payment Configuration ──────────────────────────────────
 
-const stripe = process.env.STRIPE_SECRET_KEY
-  ? new Stripe(process.env.STRIPE_SECRET_KEY)
-  : null;
+const HIVE_PAYMENT_ADDRESS = (process.env.HIVE_PAYMENT_ADDRESS || process.env.HIVETRUST_PAYMENT_ADDRESS || '').toLowerCase();
+const BASE_CHAIN_ID = 8453;
+const USDC_CONTRACT = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
 
-// Map Stripe price IDs to plan names
-const PRICE_TO_PLAN = {
-  'price_1TLbA9LyXpiMYLtrrE5FvRtR': 'starter',
-  'price_1TLbAFLyXpiMYLtrFqeX9naU': 'builder',
-  'price_1TLbAFLyXpiMYLtrAQSLWpIo': 'enterprise',
+// USDC subscription tiers
+const PLAN_TIERS = {
+  starter:    { usdc_monthly: 49,  calls: '1,000/month' },
+  builder:    { usdc_monthly: 199, calls: '10,000/month' },
+  enterprise: { usdc_monthly: 499, calls: 'Unlimited' },
 };
 
 /**
@@ -158,11 +157,10 @@ router.get('/quote', (req, res) => {
           },
         },
         subscription: {
-          description: 'Use a Stripe subscription for monthly access',
-          headers: {
-            'X-Subscription-Id': '<your_stripe_subscription_id>',
-          },
-          plans_url: 'https://hivetrustiq.com/#pricing',
+          description: 'Monthly USDC subscription for unlimited access within tier',
+          tiers: PLAN_TIERS,
+          payment_address: HIVE_PAYMENT_ADDRESS,
+          network: 'Base L2 (chain ID 8453)',
         },
       },
       protocol: 'x402',
@@ -176,60 +174,19 @@ router.get('/quote', (req, res) => {
 router.get('/verify-subscription', async (req, res) => {
   if (!requireInternalKey(req, res)) return;
 
-  const { id } = req.query;
-  if (!id) {
-    return res.status(400).json({
-      success: false,
-      error: 'Required query param: id (Stripe subscription ID)',
-    });
-  }
-
-  // Accept test subscriptions in dev/test mode
-  if (id.startsWith('sub_test_') && process.env.NODE_ENV !== 'production') {
-    return res.json({
-      success: true,
-      data: { valid: true, plan: 'builder', status: 'active' },
-    });
-  }
-
-  // Verify via Stripe API
-  if (!stripe) {
-    return res.status(503).json({
-      success: false,
-      error: 'Stripe is not configured (missing STRIPE_SECRET_KEY)',
-    });
-  }
-
-  try {
-    const subscription = await stripe.subscriptions.retrieve(id);
-    const isActive = subscription.status === 'active' || subscription.status === 'trialing';
-    let plan = 'starter'; // default
-
-    // Resolve plan from subscription items
-    const items = subscription.items?.data || [];
-    for (const item of items) {
-      const priceId = item.price?.id;
-      if (priceId && PRICE_TO_PLAN[priceId]) {
-        plan = PRICE_TO_PLAN[priceId];
-        break;
-      }
-    }
-
-    return res.json({
-      success: true,
-      data: {
-        valid: isActive,
-        plan,
-        status: isActive ? 'active' : 'inactive',
-      },
-    });
-  } catch (err) {
-    // Stripe throws for invalid/not-found subscription IDs
-    return res.json({
-      success: true,
-      data: { valid: false, plan: null, status: 'inactive' },
-    });
-  }
+  // Subscription verification is now handled via on-chain USDC payments.
+  // This endpoint returns the available tiers and payment instructions.
+  return res.json({
+    success: true,
+    data: {
+      payment_method: 'USDC on Base L2',
+      tiers: PLAN_TIERS,
+      payment_address: HIVE_PAYMENT_ADDRESS,
+      network: `eip155:${BASE_CHAIN_ID}`,
+      usdc_contract: USDC_CONTRACT,
+      instructions: 'Send the monthly USDC amount to the payment address on Base. Include the tx hash in X-Payment-Hash header for per-call access.',
+    },
+  });
 });
 
 // ─── POST /pricing/verify-payment — Cross-platform payment verification ──

@@ -181,10 +181,10 @@ app.get('/.well-known/hive-payments.json', (req, res) => {
       hivetrust: { url: 'https://hivetrustiq.com', api: hivetrustApi },
     },
     subscription_plans_url: 'https://hivetrustiq.com/#pricing',
-    stripe_products: {
-      starter: 'prod_UKFfrt1HgeLMZR',
-      builder: 'prod_UKFfRKuve796YV',
-      enterprise: 'prod_UKFf4szMyS28G5',
+    subscription_tiers: {
+      starter:    { usdc_monthly: 49,  calls: '1,000/month' },
+      builder:    { usdc_monthly: 199, calls: '10,000/month' },
+      enterprise: { usdc_monthly: 499, calls: 'Unlimited' },
     },
   });
 });
@@ -217,7 +217,7 @@ app.use('/v1', authMiddleware);
 app.use('/mcp', authMiddleware);
 
 // ─── x402 Payment Middleware (after auth, before routes) ──────
-// Gates paid endpoints behind x402 protocol or Stripe subscription
+// Gates paid endpoints behind x402 protocol (USDC on Base L2)
 
 app.use('/v1', x402Middleware);
 
