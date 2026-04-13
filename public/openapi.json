@@ -1,0 +1,1332 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "HiveTrust API",
+    "version": "1.0.0",
+    "description": "KYA Identity Verification, Trust Scoring & Parametric Insurance for AI Agents in the A2A Economy.\n\nAll endpoints require an `X-API-Key` header unless noted. Costs are billed per call and reflected in your operator account.",
+    "contact": {
+      "name": "HiveTrust Support",
+      "url": "https://hivetrust.hiveagentiq.com",
+      "email": "support@hiveagentiq.com"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://hivetrust.hiveagentiq.com",
+      "description": "Production"
+    },
+    {
+      "url": "http://localhost:3001",
+      "description": "Local development"
+    }
+  ],
+  "security": [
+    { "ApiKeyAuth": [] }
+  ],
+  "tags": [
+    { "name": "Identity", "description": "Agent registration and KYA verification" },
+    { "name": "Credentials", "description": "W3C Verifiable Credential issuance and verification" },
+    { "name": "Trust Score", "description": "Reputation scoring and risk evaluation" },
+    { "name": "Telemetry", "description": "Behavioural event ingestion and audit trail" },
+    { "name": "Insurance", "description": "Parametric insurance quotes, binding, and claims" },
+    { "name": "Disputes", "description": "Dispute filing and resolution" },
+    { "name": "Webhooks", "description": "Webhook endpoint management" },
+    { "name": "Federation", "description": "Cross-registry score portability" },
+    { "name": "System", "description": "Health, statistics, and discovery" }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Health check",
+        "description": "Returns platform health status. No authentication required.",
+        "security": [],
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "Platform is healthy",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" },
+                "example": { "status": "ok", "version": "1.0.0", "uptime": 3600.14 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/hivetrust.json": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Discovery document",
+        "description": "Machine-readable platform capabilities document.",
+        "security": [],
+        "operationId": "getDiscovery",
+        "responses": {
+          "200": {
+            "description": "Discovery document",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DiscoveryDocument" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stats": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Platform statistics",
+        "operationId": "getStats",
+        "responses": {
+          "200": {
+            "description": "Aggregate platform metrics",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PlatformStats" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agents": {
+      "post": {
+        "tags": ["Identity"],
+        "summary": "Register an agent",
+        "description": "Creates a new agent identity, assigns a DID (`did:hive:<uuid>`), and stores the Ed25519 public key. Cost: $0.01.",
+        "operationId": "registerAgent",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RegisterAgentRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Agent created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Agent" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/v1/agents/{agentId}": {
+      "get": {
+        "tags": ["Identity"],
+        "summary": "Get agent profile",
+        "operationId": "getAgent",
+        "parameters": [{ "$ref": "#/components/parameters/agentId" }],
+        "responses": {
+          "200": {
+            "description": "Agent profile",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Agent" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "put": {
+        "tags": ["Identity"],
+        "summary": "Update agent metadata",
+        "description": "Updates mutable fields and creates an immutable version snapshot. Cost: $0.01.",
+        "operationId": "updateAgent",
+        "parameters": [{ "$ref": "#/components/parameters/agentId" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateAgentRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated agent",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Agent" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "tags": ["Identity"],
+        "summary": "Deactivate agent",
+        "description": "Marks the agent as inactive and adds it to the revocation registry.",
+        "operationId": "deactivateAgent",
+        "parameters": [{ "$ref": "#/components/parameters/agentId" }],
+        "responses": {
+          "200": {
+            "description": "Agent deactivated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SuccessMessage" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/agents/{agentId}/credentials": {
+      "post": {
+        "tags": ["Credentials"],
+        "summary": "Issue a credential",
+        "description": "Issues a signed W3C Verifiable Credential for the agent. Cost: $0.05.",
+        "operationId": "issueCredential",
+        "parameters": [{ "$ref": "#/components/parameters/agentId" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/IssueCredentialRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Credential issued",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Credential" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "get": {
+        "tags": ["Credentials"],
+        "summary": "List agent credentials",
+        "operationId": "listCredentials",
+        "parameters": [
+          { "$ref": "#/components/parameters/agentId" },
+          { "$ref": "#/components/parameters/limit" },
+          { "$ref": "#/components/parameters/offset" }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "credentials": { "type": "array", "items": { "$ref": "#/components/schemas/Credential" } },
+                    "total": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agents/{agentId}/credentials/{credentialId}": {
+      "delete": {
+        "tags": ["Credentials"],
+        "summary": "Revoke a credential",
+        "operationId": "revokeCredential",
+        "parameters": [
+          { "$ref": "#/components/parameters/agentId" },
+          { "$ref": "#/components/parameters/credentialId" }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": { "type": "string", "description": "Reason for revocation" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Credential revoked",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SuccessMessage" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/verify/credential": {
+      "post": {
+        "tags": ["Credentials"],
+        "summary": "Verify a credential",
+        "description": "Checks signature validity, expiry, and revocation status. Cost: $0.01.",
+        "operationId": "verifyCredential",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/VerifyCredentialRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verification result",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/VerifyCredentialResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agents/{agentId}/score": {
+      "get": {
+        "tags": ["Trust Score"],
+        "summary": "Get trust score",
+        "description": "Returns the current composite score and all five pillar sub-scores. Cost: $0.01.",
+        "operationId": "getTrustScore",
+        "parameters": [{ "$ref": "#/components/parameters/agentId" }],
+        "responses": {
+          "200": {
+            "description": "Trust score",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TrustScore" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/agents/{agentId}/score/history": {
+      "get": {
+        "tags": ["Trust Score"],
+        "summary": "Score history",
+        "description": "Paginated history of trust score computations. Cost: $0.01.",
+        "operationId": "getTrustScoreHistory",
+        "parameters": [
+          { "$ref": "#/components/parameters/agentId" },
+          { "$ref": "#/components/parameters/limit" },
+          { "$ref": "#/components/parameters/offset" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Score history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "history": { "type": "array", "items": { "$ref": "#/components/schemas/TrustScore" } },
+                    "total": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/verify_agent_risk": {
+      "get": {
+        "tags": ["Trust Score"],
+        "summary": "Quick risk check",
+        "description": "Returns a binary `clear` or `block` decision optimised for payment-processor latency (< 50ms). Cost: $0.01.",
+        "operationId": "verifyAgentRisk",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "min_score",
+            "in": "query",
+            "schema": { "type": "integer", "minimum": 0, "maximum": 1000 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Risk decision",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RiskCheckResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/telemetry/ingest": {
+      "post": {
+        "tags": ["Telemetry"],
+        "summary": "Ingest behavioural events",
+        "description": "Bulk event ingestion (up to 1 000 events per call). Events feed the reputation engine. Cost: $0.001/event.",
+        "operationId": "ingestTelemetry",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TelemetryIngestRequest" }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Events accepted",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TelemetryIngestResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agents/{agentId}/events": {
+      "get": {
+        "tags": ["Telemetry"],
+        "summary": "Get agent audit trail",
+        "operationId": "getAgentEvents",
+        "parameters": [
+          { "$ref": "#/components/parameters/agentId" },
+          { "$ref": "#/components/parameters/limit" },
+          { "$ref": "#/components/parameters/offset" },
+          {
+            "name": "event_type",
+            "in": "query",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "events": { "type": "array", "items": { "$ref": "#/components/schemas/BehavioralEvent" } },
+                    "total": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/insurance/quote": {
+      "post": {
+        "tags": ["Insurance"],
+        "summary": "Get insurance quote",
+        "description": "Calculates a dynamic premium based on both agents' trust scores and transaction value.",
+        "operationId": "getInsuranceQuote",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/InsuranceQuoteRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Insurance quote",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/InsuranceQuoteResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/insurance/bind": {
+      "post": {
+        "tags": ["Insurance"],
+        "summary": "Bind insurance policy",
+        "description": "Binds the quoted policy and deploys USDC escrow on Base L2. Take rate: 1.5% of insured value.",
+        "operationId": "bindInsurance",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/InsuranceBindRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Policy bound",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/InsurancePolicy" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/insurance/policies/{policyId}": {
+      "get": {
+        "tags": ["Insurance"],
+        "summary": "Get policy details",
+        "operationId": "getInsurancePolicy",
+        "parameters": [{ "$ref": "#/components/parameters/policyId" }],
+        "responses": {
+          "200": {
+            "description": "Insurance policy",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/InsurancePolicy" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/insurance/claims": {
+      "post": {
+        "tags": ["Insurance"],
+        "summary": "File a claim",
+        "operationId": "fileClaim",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/FileClaimRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Claim filed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Claim" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/insurance/claims/{claimId}": {
+      "get": {
+        "tags": ["Insurance"],
+        "summary": "Get claim status",
+        "operationId": "getClaim",
+        "parameters": [{ "$ref": "#/components/parameters/claimId" }],
+        "responses": {
+          "200": {
+            "description": "Claim details",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Claim" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/disputes": {
+      "post": {
+        "tags": ["Disputes"],
+        "summary": "File a dispute",
+        "operationId": "fileDispute",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/FileDisputeRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Dispute filed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Dispute" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/disputes/{disputeId}": {
+      "get": {
+        "tags": ["Disputes"],
+        "summary": "Get dispute",
+        "operationId": "getDispute",
+        "parameters": [{ "$ref": "#/components/parameters/disputeId" }],
+        "responses": {
+          "200": {
+            "description": "Dispute details",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Dispute" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/disputes/{disputeId}/resolve": {
+      "post": {
+        "tags": ["Disputes"],
+        "summary": "Resolve a dispute",
+        "description": "Submits a resolution decision that impacts both parties' trust scores.",
+        "operationId": "resolveDispute",
+        "parameters": [{ "$ref": "#/components/parameters/disputeId" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ResolveDisputeRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Dispute resolved",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Dispute" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/webhooks": {
+      "post": {
+        "tags": ["Webhooks"],
+        "summary": "Register a webhook",
+        "description": "Registers a URL to receive HMAC-SHA256 signed event notifications.",
+        "operationId": "registerWebhook",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RegisterWebhookRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Webhook registered",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/WebhookEndpoint" }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": ["Webhooks"],
+        "summary": "List webhooks",
+        "operationId": "listWebhooks",
+        "responses": {
+          "200": {
+            "description": "Webhook endpoints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "webhooks": { "type": "array", "items": { "$ref": "#/components/schemas/WebhookEndpoint" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/webhooks/{webhookId}": {
+      "delete": {
+        "tags": ["Webhooks"],
+        "summary": "Remove a webhook",
+        "operationId": "deleteWebhook",
+        "parameters": [{ "$ref": "#/components/parameters/webhookId" }],
+        "responses": {
+          "200": {
+            "description": "Webhook removed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SuccessMessage" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/federation/peers": {
+      "post": {
+        "tags": ["Federation"],
+        "summary": "Register a federation peer",
+        "operationId": "registerFederationPeer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/FederationPeerRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Peer registered",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FederationPeer" }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": ["Federation"],
+        "summary": "List federation peers",
+        "operationId": "listFederationPeers",
+        "responses": {
+          "200": {
+            "description": "Federation peers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "peers": { "type": "array", "items": { "$ref": "#/components/schemas/FederationPeer" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/federation/sync": {
+      "post": {
+        "tags": ["Federation"],
+        "summary": "Sync scores with peer",
+        "description": "Initiates bidirectional trust score exchange with a registered federation peer.",
+        "operationId": "syncFederation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["peer_id"],
+                "properties": {
+                  "peer_id": { "type": "string", "format": "uuid" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sync result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "synced_agents": { "type": "integer" },
+                    "duration_ms": { "type": "number" },
+                    "synced_at": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp": {
+      "post": {
+        "tags": ["System"],
+        "summary": "MCP JSON-RPC 2.0 endpoint",
+        "description": "Model Context Protocol endpoint. Supports `tools/list` and `tools/call` methods.",
+        "operationId": "mcpEndpoint",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/MCPRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "MCP response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MCPResponse" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "API key obtained from the HiveTrust dashboard or via the seed script for testing."
+      }
+    },
+    "parameters": {
+      "agentId": {
+        "name": "agentId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "format": "uuid" },
+        "description": "Agent UUID"
+      },
+      "credentialId": {
+        "name": "credentialId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "format": "uuid" }
+      },
+      "policyId": {
+        "name": "policyId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "format": "uuid" }
+      },
+      "claimId": {
+        "name": "claimId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "format": "uuid" }
+      },
+      "disputeId": {
+        "name": "disputeId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "format": "uuid" }
+      },
+      "webhookId": {
+        "name": "webhookId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "format": "uuid" }
+      },
+      "limit": {
+        "name": "limit",
+        "in": "query",
+        "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }
+      },
+      "offset": {
+        "name": "offset",
+        "in": "query",
+        "schema": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request body or parameters",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid API key",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Resource already exists",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Agent": {
+        "type": "object",
+        "description": "An AI agent registered with HiveTrust",
+        "properties": {
+          "id": { "type": "string", "format": "uuid", "description": "Agent UUID" },
+          "name": { "type": "string", "description": "Human-readable agent name" },
+          "description": { "type": "string" },
+          "operator_name": { "type": "string" },
+          "operator_contact": { "type": "string" },
+          "model_fingerprint": { "type": "string", "description": "SHA-256 fingerprint of the underlying model" },
+          "public_key": { "type": "string", "description": "Ed25519 public key, base58 encoded" },
+          "did": { "type": "string", "description": "Decentralised identifier (did:hive:<uuid>)" },
+          "endpoint_url": { "type": "string", "format": "uri" },
+          "capability_manifest": { "type": "object", "description": "Declared tools and permissions" },
+          "trust_tier": {
+            "type": "string",
+            "enum": ["unverified", "provisional", "standard", "elevated", "sovereign"]
+          },
+          "status": { "type": "string", "enum": ["active", "inactive", "suspended"] },
+          "version": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "RegisterAgentRequest": {
+        "type": "object",
+        "required": ["name", "public_key", "endpoint_url"],
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "operator_name": { "type": "string" },
+          "operator_contact": { "type": "string" },
+          "model_fingerprint": { "type": "string" },
+          "public_key": { "type": "string", "description": "Ed25519 public key, base58 encoded" },
+          "endpoint_url": { "type": "string", "format": "uri" },
+          "capability_manifest": { "type": "object" }
+        }
+      },
+      "UpdateAgentRequest": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "operator_contact": { "type": "string" },
+          "endpoint_url": { "type": "string", "format": "uri" },
+          "capability_manifest": { "type": "object" }
+        }
+      },
+      "TrustScore": {
+        "type": "object",
+        "description": "Composite trust score with pillar breakdown",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "agent_id": { "type": "string", "format": "uuid" },
+          "score": { "type": "integer", "minimum": 0, "maximum": 1000 },
+          "tier": {
+            "type": "string",
+            "enum": ["unverified", "provisional", "standard", "elevated", "sovereign"]
+          },
+          "pillars": {
+            "type": "object",
+            "properties": {
+              "transaction_success": { "type": "number", "description": "35% weight — SLA completion rate" },
+              "capital_staked": { "type": "number", "description": "25% weight — USDC in collateral pool" },
+              "network_centrality": { "type": "number", "description": "15% weight — PageRank in transaction graph" },
+              "identity_strength": { "type": "number", "description": "15% weight — DID anchor, ZKP proofs" },
+              "compliance": { "type": "number", "description": "10% weight — EU AI Act, NIST alignment" }
+            }
+          },
+          "total_transactions": { "type": "integer" },
+          "successful_transactions": { "type": "integer" },
+          "disputed_transactions": { "type": "integer" },
+          "collateral_staked_usdc": { "type": "number" },
+          "computed_at": { "type": "string", "format": "date-time" },
+          "valid_until": { "type": "string", "format": "date-time" }
+        }
+      },
+      "RiskCheckResponse": {
+        "type": "object",
+        "properties": {
+          "agent_id": { "type": "string", "format": "uuid" },
+          "decision": { "type": "string", "enum": ["clear", "block"] },
+          "score": { "type": "integer" },
+          "tier": { "type": "string" },
+          "latency_ms": { "type": "number" }
+        }
+      },
+      "Credential": {
+        "type": "object",
+        "description": "W3C Verifiable Credential issued to an agent",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "agent_id": { "type": "string", "format": "uuid" },
+          "credential_type": { "type": "string" },
+          "issuer_id": { "type": "string" },
+          "issuer_name": { "type": "string" },
+          "claims": { "type": "object" },
+          "proof_type": { "type": "string" },
+          "proof_value": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "revoked", "expired"] },
+          "trust_tier": { "type": "string" },
+          "issued_at": { "type": "string", "format": "date-time" },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "revoked_at": { "type": "string", "format": "date-time", "nullable": true },
+          "revocation_reason": { "type": "string", "nullable": true }
+        }
+      },
+      "IssueCredentialRequest": {
+        "type": "object",
+        "required": ["credential_type", "issuer_id"],
+        "properties": {
+          "credential_type": { "type": "string", "example": "BasicIdentityCredential" },
+          "issuer_id": { "type": "string", "example": "did:hive:hivetrust-root" },
+          "claims": { "type": "object" },
+          "ttl_days": { "type": "integer", "description": "Credential validity period in days" }
+        }
+      },
+      "VerifyCredentialRequest": {
+        "type": "object",
+        "required": ["credential_id"],
+        "properties": {
+          "credential_id": { "type": "string", "format": "uuid" }
+        }
+      },
+      "VerifyCredentialResponse": {
+        "type": "object",
+        "properties": {
+          "credential_id": { "type": "string", "format": "uuid" },
+          "valid": { "type": "boolean" },
+          "checks": {
+            "type": "object",
+            "properties": {
+              "signature_valid": { "type": "boolean" },
+              "not_expired": { "type": "boolean" },
+              "not_revoked": { "type": "boolean" }
+            }
+          },
+          "credential": { "$ref": "#/components/schemas/Credential" }
+        }
+      },
+      "InsurancePolicy": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "agent_id": { "type": "string", "format": "uuid" },
+          "counterparty_id": { "type": "string", "format": "uuid" },
+          "policy_type": { "type": "string", "enum": ["transaction", "performance", "liability"] },
+          "coverage_usdc": { "type": "number" },
+          "premium_usdc": { "type": "number" },
+          "premium_rate": { "type": "number", "description": "Fraction of coverage_usdc" },
+          "escrow_address": { "type": "string", "description": "USDC escrow contract on Base L2" },
+          "status": { "type": "string", "enum": ["active", "expired", "claimed", "cancelled"] },
+          "transaction_value_usdc": { "type": "number" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "expires_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "InsuranceQuoteRequest": {
+        "type": "object",
+        "required": ["agent_id", "transaction_value_usdc"],
+        "properties": {
+          "agent_id": { "type": "string", "format": "uuid" },
+          "counterparty_id": { "type": "string", "format": "uuid" },
+          "transaction_value_usdc": { "type": "number", "minimum": 0 },
+          "policy_type": {
+            "type": "string",
+            "enum": ["transaction", "performance", "liability"],
+            "default": "transaction"
+          }
+        }
+      },
+      "InsuranceQuoteResponse": {
+        "type": "object",
+        "properties": {
+          "quote_id": { "type": "string", "format": "uuid" },
+          "agent_id": { "type": "string", "format": "uuid" },
+          "transaction_value_usdc": { "type": "number" },
+          "coverage_usdc": { "type": "number" },
+          "premium_usdc": { "type": "number" },
+          "premium_rate": { "type": "number" },
+          "agent_score": { "type": "integer" },
+          "counterparty_score": { "type": "integer", "nullable": true },
+          "eligible": { "type": "boolean" },
+          "ineligibility_reason": { "type": "string", "nullable": true },
+          "quote_expires_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "InsuranceBindRequest": {
+        "type": "object",
+        "required": ["quote_id", "agent_id", "transaction_value_usdc"],
+        "properties": {
+          "quote_id": { "type": "string", "format": "uuid" },
+          "agent_id": { "type": "string", "format": "uuid" },
+          "counterparty_id": { "type": "string", "format": "uuid" },
+          "transaction_value_usdc": { "type": "number" },
+          "policy_type": { "type": "string", "enum": ["transaction", "performance", "liability"] }
+        }
+      },
+      "Claim": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "policy_id": { "type": "string", "format": "uuid" },
+          "claimant_agent_id": { "type": "string", "format": "uuid" },
+          "claim_type": { "type": "string" },
+          "claimed_amount_usdc": { "type": "number" },
+          "approved_amount_usdc": { "type": "number", "nullable": true },
+          "evidence": { "type": "object" },
+          "status": { "type": "string", "enum": ["pending", "approved", "rejected", "paid"] },
+          "resolution_notes": { "type": "string", "nullable": true },
+          "filed_at": { "type": "string", "format": "date-time" },
+          "resolved_at": { "type": "string", "format": "date-time", "nullable": true },
+          "paid_at": { "type": "string", "format": "date-time", "nullable": true }
+        }
+      },
+      "FileClaimRequest": {
+        "type": "object",
+        "required": ["policy_id", "claimant_agent_id", "claim_type", "claimed_amount_usdc"],
+        "properties": {
+          "policy_id": { "type": "string", "format": "uuid" },
+          "claimant_agent_id": { "type": "string", "format": "uuid" },
+          "claim_type": { "type": "string" },
+          "claimed_amount_usdc": { "type": "number" },
+          "evidence": { "type": "object" }
+        }
+      },
+      "Dispute": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "complainant_agent_id": { "type": "string", "format": "uuid" },
+          "respondent_agent_id": { "type": "string", "format": "uuid" },
+          "transaction_ref": { "type": "string" },
+          "description": { "type": "string" },
+          "evidence": { "type": "object" },
+          "status": { "type": "string", "enum": ["open", "under_review", "resolved", "dismissed"] },
+          "outcome": { "type": "string", "nullable": true },
+          "score_impact_complainant": { "type": "integer", "nullable": true },
+          "score_impact_respondent": { "type": "integer", "nullable": true },
+          "filed_at": { "type": "string", "format": "date-time" },
+          "resolved_at": { "type": "string", "format": "date-time", "nullable": true }
+        }
+      },
+      "FileDisputeRequest": {
+        "type": "object",
+        "required": ["complainant_agent_id", "respondent_agent_id", "description"],
+        "properties": {
+          "complainant_agent_id": { "type": "string", "format": "uuid" },
+          "respondent_agent_id": { "type": "string", "format": "uuid" },
+          "transaction_ref": { "type": "string" },
+          "description": { "type": "string" },
+          "evidence": { "type": "object" }
+        }
+      },
+      "ResolveDisputeRequest": {
+        "type": "object",
+        "required": ["outcome"],
+        "properties": {
+          "outcome": { "type": "string", "enum": ["complainant_wins", "respondent_wins", "mutual_resolution", "dismissed"] },
+          "resolution_notes": { "type": "string" }
+        }
+      },
+      "WebhookEndpoint": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "url": { "type": "string", "format": "uri" },
+          "events": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Event types to subscribe to (e.g. agent.registered, score.updated)"
+          },
+          "status": { "type": "string", "enum": ["active", "disabled"] },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "RegisterWebhookRequest": {
+        "type": "object",
+        "required": ["url", "events"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "events": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "BehavioralEvent": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "agent_id": { "type": "string", "format": "uuid" },
+          "event_type": { "type": "string" },
+          "payload": { "type": "object" },
+          "occurred_at": { "type": "string", "format": "date-time" },
+          "ingested_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "TelemetryIngestRequest": {
+        "type": "object",
+        "required": ["agent_id", "events"],
+        "properties": {
+          "agent_id": { "type": "string", "format": "uuid" },
+          "events": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "object",
+              "required": ["event_type", "occurred_at"],
+              "properties": {
+                "event_type": { "type": "string" },
+                "payload": { "type": "object" },
+                "occurred_at": { "type": "string", "format": "date-time" }
+              }
+            }
+          }
+        }
+      },
+      "TelemetryIngestResponse": {
+        "type": "object",
+        "properties": {
+          "accepted": { "type": "integer" },
+          "rejected": { "type": "integer" },
+          "ingested_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "FederationPeer": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "base_url": { "type": "string", "format": "uri" },
+          "status": { "type": "string", "enum": ["active", "inactive"] },
+          "last_synced_at": { "type": "string", "format": "date-time", "nullable": true },
+          "registered_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "FederationPeerRequest": {
+        "type": "object",
+        "required": ["name", "base_url"],
+        "properties": {
+          "name": { "type": "string" },
+          "base_url": { "type": "string", "format": "uri" }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "ok" },
+          "version": { "type": "string" },
+          "uptime": { "type": "number", "description": "Server uptime in seconds" }
+        }
+      },
+      "PlatformStats": {
+        "type": "object",
+        "properties": {
+          "total_agents": { "type": "integer" },
+          "active_agents": { "type": "integer" },
+          "total_credentials_issued": { "type": "integer" },
+          "total_transactions_scored": { "type": "integer" },
+          "active_policies": { "type": "integer" },
+          "total_claims": { "type": "integer" },
+          "total_insured_value_usdc": { "type": "number" },
+          "tier_distribution": {
+            "type": "object",
+            "properties": {
+              "unverified": { "type": "integer" },
+              "provisional": { "type": "integer" },
+              "standard": { "type": "integer" },
+              "elevated": { "type": "integer" },
+              "sovereign": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "DiscoveryDocument": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "version": { "type": "string" },
+          "description": { "type": "string" },
+          "api_base": { "type": "string" },
+          "mcp_endpoint": { "type": "string" },
+          "supported_protocols": { "type": "array", "items": { "type": "string" } },
+          "identity_standards": { "type": "array", "items": { "type": "string" } },
+          "scoring_range": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 },
+          "trust_tiers": { "type": "array", "items": { "type": "string" } },
+          "insurance_types": { "type": "array", "items": { "type": "string" } },
+          "federation_enabled": { "type": "boolean" },
+          "hiveagent_integration": { "type": "boolean" }
+        }
+      },
+      "MCPRequest": {
+        "type": "object",
+        "required": ["jsonrpc", "method"],
+        "properties": {
+          "jsonrpc": { "type": "string", "enum": ["2.0"] },
+          "id": { "oneOf": [{ "type": "string" }, { "type": "integer" }] },
+          "method": { "type": "string", "enum": ["tools/list", "tools/call"] },
+          "params": { "type": "object" }
+        }
+      },
+      "MCPResponse": {
+        "type": "object",
+        "properties": {
+          "jsonrpc": { "type": "string", "enum": ["2.0"] },
+          "id": { "oneOf": [{ "type": "string" }, { "type": "integer" }] },
+          "result": { "type": "object" },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "integer" },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      },
+      "SuccessMessage": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": true },
+          "message": { "type": "string" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" },
+          "message": { "type": "string" },
+          "details": { "type": "object" }
+        }
+      }
+    }
+  }
+}

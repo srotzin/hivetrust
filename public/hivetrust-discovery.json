@@ -1,0 +1,14 @@
+{
+  "name": "HiveTrust",
+  "version": "1.0.0",
+  "description": "KYA Identity Verification, Trust Scoring & Insurance for AI Agents",
+  "api_base": "/v1",
+  "mcp_endpoint": "/mcp",
+  "supported_protocols": ["mcp", "rest", "x402"],
+  "identity_standards": ["did:hive", "ed25519", "a-jwt", "w3c-vc"],
+  "scoring_range": [0, 1000],
+  "trust_tiers": ["unverified", "provisional", "standard", "elevated", "sovereign"],
+  "insurance_types": ["transaction", "performance", "liability"],
+  "federation_enabled": true,
+  "hiveagent_integration": true
+}

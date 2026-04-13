@@ -1,0 +1,42 @@
+{
+  "name": "@hivetrust/sdk",
+  "version": "1.0.0",
+  "description": "Official JavaScript/TypeScript SDK for the HiveTrust KYA Identity Verification, Trust Scoring & Parametric Insurance API",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": {
+      "import": "./index.js"
+    }
+  },
+  "keywords": [
+    "hivetrust",
+    "hiveagent",
+    "ai-agent",
+    "trust-score",
+    "kya",
+    "identity-verification",
+    "parametric-insurance",
+    "a2a",
+    "mcp",
+    "did",
+    "verifiable-credentials",
+    "web3"
+  ],
+  "author": "HiveAgent IQ <sdk@hiveagentiq.com>",
+  "license": "MIT",
+  "homepage": "https://hivetrust.hiveagentiq.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hiveagentiq/hivetrust.git",
+    "directory": "packages/npm"
+  },
+  "bugs": {
+    "url": "https://github.com/hiveagentiq/hivetrust/issues"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

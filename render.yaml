@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: hivetrust
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node start.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HIVETRUST_HOST
+        value: https://hivetrust.hiveagentiq.com
+      - key: PORT
+        value: 3001
+      - key: HIVEAGENT_URL
+        value: https://hiveagentiq.com
+      - key: INTERNAL_API_TOKEN
+        generateValue: true
+      - key: CDP_API_KEY_ID
+        sync: false
+      - key: CDP_API_KEY_SECRET
+        sync: false
+      - key: COLLATERAL_POOL_ADDRESS
+        sync: false
+      - key: FEDERATION_SECRET
+        generateValue: true
+      - key: WEBHOOK_SIGNING_SECRET
+        generateValue: true

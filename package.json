@@ -1,0 +1,39 @@
+{
+  "name": "hivetrust",
+  "version": "1.0.0",
+  "description": "HiveTrust — KYA (Know Your Agent) Identity Verification, Trust Scoring & Insurance for AI Agents",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node start.js",
+    "dev": "node --watch start.js",
+    "seed": "node start.js --seed",
+    "test": "node --test src/**/*.test.js"
+  },
+  "keywords": [
+    "ai-agents",
+    "identity-verification",
+    "kya",
+    "know-your-agent",
+    "trust-scoring",
+    "reputation",
+    "mcp",
+    "agent-insurance",
+    "verifiable-credentials",
+    "hiveagent"
+  ],
+  "author": "HiveAgent IQ",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.0",
+    "better-sqlite3": "^12.8.0",
+    "uuid": "^13.0.0",
+    "bs58": "^6.0.0",
+    "@coinbase/cdp-sdk": "^1.46.1"
+  }
+}

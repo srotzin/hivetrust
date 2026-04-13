@@ -1,0 +1,63 @@
+# fly.toml — HiveTrust Fly.io deployment configuration
+# Deploy with: fly deploy
+
+app = "hivetrust"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV     = "production"
+  PORT         = "3001"
+  HIVETRUST_HOST = "https://hivetrust.hiveagentiq.com"
+  HIVEAGENT_URL  = "https://hiveagentiq.com"
+
+[http_service]
+  internal_port       = 3001
+  force_https         = true
+  auto_stop_machines  = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes            = ["app"]
+
+  [[http_service.checks]]
+    grace_period  = "15s"
+    interval      = "30s"
+    method        = "GET"
+    path          = "/health"
+    protocol      = "http"
+    timeout       = "10s"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus     = 1
+  memory   = "512mb"
+
+[mounts]
+  # Persistent volume for SQLite database
+  source      = "hivetrust_data"
+  destination = "/app/data"
+
+[[services]]
+  protocol    = "tcp"
+  internal_port = 3001
+
+  [[services.ports]]
+    handlers = ["http"]
+    port     = 80
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port     = 443
+
+  [services.concurrency]
+    hard_limit = 250
+    soft_limit = 200
+    type       = "connections"
+
+  [[services.tcp_checks]]
+    grace_period  = "10s"
+    interval      = "30s"
+    restart_limit = 0
+    timeout       = "5s"
