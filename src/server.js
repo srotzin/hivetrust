@@ -6,6 +6,15 @@
  */
 
 import 'dotenv/config';
+import * as Sentry from '@sentry/node';
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN || '',
+  environment: process.env.NODE_ENV || 'development',
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+  enabled: !!process.env.SENTRY_DSN,
+});
+
 import express from 'express';
 import cors from 'cors';
 
@@ -17,6 +26,8 @@ import apiRouter from './routes/api.js';
 import pricingRouter from './routes/pricing.js';
 import { handleMcpRequest } from './mcp-server.js';
 import { getEngineStatus } from './services/pricing-engine.js';
+import { sendAlert } from './services/alerts.js';
+import { issueServiceToken } from './services/jwt-auth.js';
 
 // ─── App Setup ────────────────────────────────────────────────
 
@@ -69,6 +80,9 @@ app.get('/health', (req, res) => {
     db.prepare('SELECT 1').get();
   } catch (e) {
     dbStatus = 'error';
+    sendAlert('critical', 'HiveTrust', 'Database connection failure', {
+      error: e.message,
+    });
   }
 
   const healthy = dbStatus === 'ok';
@@ -175,6 +189,28 @@ app.get('/.well-known/hive-payments.json', (req, res) => {
   });
 });
 
+// ─── JWT Service Token Endpoint (public, before auth) ─────────
+
+app.post('/v1/auth/service-token', (req, res) => {
+  try {
+    const { platform, secret } = req.body;
+    if (!platform || !secret) {
+      return res.status(400).json({
+        success: false,
+        error: 'platform and secret are required',
+      });
+    }
+    const result = issueServiceToken(platform, secret);
+    return res.json({ success: true, data: result });
+  } catch (e) {
+    console.error('[POST /v1/auth/service-token]', e.message);
+    return res.status(e.status || 500).json({
+      success: false,
+      error: e.message || 'Internal server error',
+    });
+  }
+});
+
 // ─── Auth Middleware (for all /v1 and /mcp routes) ────────────
 
 app.use('/v1', authMiddleware);
@@ -207,11 +243,21 @@ app.use((req, res) => {
   });
 });
 
+// ─── Sentry Error Handler (after routes, before global handler) ──
+
+Sentry.setupExpressErrorHandler(app);
+
 // ─── Global Error Handler ─────────────────────────────────────
 
 // Express 5 accepts 4-argument error handlers
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+  Sentry.captureException(err);
   console.error('[HiveTrust] Unhandled error:', err.message, err.stack);
+  sendAlert('critical', 'HiveTrust', `Unhandled error: ${err.message}`, {
+    path: req.path,
+    method: req.method,
+    status: err.status || 500,
+  });
   return res.status(err.status || 500).json({
     success: false,
     error: err.message || 'Internal server error',

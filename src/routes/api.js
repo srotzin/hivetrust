@@ -69,6 +69,7 @@ import {
 } from '../services/federation.js';
 
 import { getPlatformStats } from '../services/stats.js';
+import { sendAlert } from '../services/alerts.js';
 
 // ─── Router ───────────────────────────────────────────────────
 const router = Router();
@@ -123,6 +124,12 @@ router.post('/agents', async (req, res) => {
       euAiActClass: eu_ai_act_class,
       hiveagentId: hiveagent_id,
       metadata,
+    });
+
+    sendAlert('info', 'HiveTrust', `Agent registered: ${name || agent.id}`, {
+      agent_id: agent.id,
+      did: agent.did || 'N/A',
+      owner: owner_id || 'N/A',
     });
 
     return ok(res, agent, 201);

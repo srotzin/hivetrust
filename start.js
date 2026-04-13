@@ -28,12 +28,22 @@ async function boot() {
     console.log('[HiveTrust] Database seeded successfully');
   }
 
+  // Seed service accounts for JWT cross-platform auth
+  const { seedServiceAccounts } = await import('./src/services/jwt-auth.js');
+  seedServiceAccounts();
+
+  const { sendAlert } = await import('./src/services/alerts.js');
+
   const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => {
     console.log(`[HiveTrust] KYA Identity & Trust API running on port ${PORT}`);
     console.log(`[HiveTrust] MCP endpoint: POST /mcp`);
     console.log(`[HiveTrust] API endpoint: /v1/`);
     console.log(`[HiveTrust] Health check: GET /health`);
+    sendAlert('info', 'HiveTrust', `Service started on port ${PORT}`, {
+      version: '2.0.0',
+      env: process.env.NODE_ENV || 'development',
+    });
   });
 }
 
