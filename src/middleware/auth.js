@@ -9,6 +9,7 @@
 
 import { createHash } from 'crypto';
 import db from '../db.js';
+import { verifyServiceToken } from '../services/jwt-auth.js';
 
 // Public paths — no auth required (exact match or startsWith)
 // NOTE: When mounted on /v1, req.path is relative (e.g. /stats not /v1/stats)
@@ -43,6 +44,36 @@ export default function authMiddleware(req, res, next) {
   // Skip auth for public endpoints
   if (isPublicPath(req.path)) {
     return next();
+  }
+
+  // Check for JWT Bearer token (Authorization: Bearer <token>)
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    // Only treat as JWT if it doesn't look like a DID
+    if (!token.startsWith('did:hive:')) {
+      try {
+        const payload = verifyServiceToken(token);
+        req.serviceAccount = {
+          platform: payload.platform,
+          scopes: payload.scopes || [],
+        };
+        req.apiKey = {
+          id: `svc:${payload.platform}`,
+          owner_id: payload.platform,
+          name: `Service Account: ${payload.platform}`,
+          scopes: payload.scopes || [],
+          rate_limit: 100000,
+          status: 'active',
+        };
+        return next();
+      } catch (err) {
+        return res.status(err.status || 401).json({
+          success: false,
+          error: err.message || 'Invalid token',
+        });
+      }
+    }
   }
 
   // Extract raw API key from header or query param

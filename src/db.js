@@ -405,7 +405,20 @@ db.exec(`
     FOREIGN KEY (peer_id) REFERENCES federation_peers(id)
   );
 
+  -- Service Accounts: JWT-based cross-platform authentication
+  CREATE TABLE IF NOT EXISTS service_accounts (
+    account_id TEXT PRIMARY KEY,
+    platform TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    secret_hash TEXT NOT NULL,
+    scopes TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'active',
+    last_used_at TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
   -- Indexes
+  CREATE INDEX IF NOT EXISTS idx_service_accounts_platform ON service_accounts(platform);
   CREATE INDEX IF NOT EXISTS idx_agents_owner ON agents(owner_id);
   CREATE INDEX IF NOT EXISTS idx_agents_trust_tier ON agents(trust_tier);
   CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);

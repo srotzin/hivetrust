@@ -1,0 +1,22 @@
+{
+  "name": "@hive-civilization/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for the Hive Civilization — 5-platform AI agent ecosystem",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ai-agents",
+    "hive",
+    "did",
+    "identity",
+    "autonomous"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^6.0.2"
+  }
+}

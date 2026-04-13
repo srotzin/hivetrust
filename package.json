@@ -35,6 +35,8 @@
     "uuid": "^13.0.0",
     "bs58": "^6.0.0",
     "@coinbase/cdp-sdk": "^1.46.1",
+    "@sentry/node": "^9.22.0",
+    "jsonwebtoken": "^9.0.2",
     "stripe": "^17.7.0"
   }
 }
