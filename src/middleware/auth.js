@@ -46,8 +46,10 @@ export default function authMiddleware(req, res, next) {
   }
 
   // Extract raw API key from header or query param
+  // Supports X-API-Key (standard) and X-Hive-Internal-Key (constellation cross-platform calls)
   const rawKey =
     req.headers['x-api-key'] ||
+    req.headers['x-hive-internal-key'] ||
     req.query?.api_key ||
     null;
 
@@ -58,13 +60,15 @@ export default function authMiddleware(req, res, next) {
     });
   }
 
-  // Check master internal token first (fast path, no DB)
+  // Check master internal tokens first (fast path, no DB)
+  // Accepts INTERNAL_API_TOKEN (master key) or HIVE_INTERNAL_KEY (constellation cross-platform key)
   const internalToken = process.env.INTERNAL_API_TOKEN;
-  if (internalToken && rawKey === internalToken) {
+  const hiveInternalKey = process.env.HIVE_INTERNAL_KEY;
+  if ((internalToken && rawKey === internalToken) || (hiveInternalKey && rawKey === hiveInternalKey)) {
     req.apiKey = {
       id: 'internal',
       owner_id: 'system',
-      name: 'Internal Master Key',
+      name: rawKey === internalToken ? 'Internal Master Key' : 'Hive Constellation Key',
       scopes: ['*'],
       rate_limit: 100000,
       status: 'active',
