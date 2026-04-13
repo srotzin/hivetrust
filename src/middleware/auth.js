@@ -46,8 +46,10 @@ export default function authMiddleware(req, res, next) {
   }
 
   // Extract raw API key from header or query param
+  // Also check X-Hive-Internal-Key (used by constellation platforms: HiveMind, HiveForge, HiveLaw)
   const rawKey =
     req.headers['x-api-key'] ||
+    req.headers['x-hive-internal-key'] ||
     req.query?.api_key ||
     null;
 

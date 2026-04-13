@@ -135,7 +135,8 @@ router.post('/agents', async (req, res) => {
 // GET /agents/:id — get agent by ID or DID
 router.get('/agents/:id', async (req, res) => {
   try {
-    const agent = await getAgent(req.params.id);
+    const agentId = req.params.id.replace(/^did:hive:/, '');
+    const agent = await getAgent(agentId);
     if (!agent) return err(res, 'Agent not found', 404);
     return ok(res, agent);
   } catch (e) {
@@ -147,7 +148,8 @@ router.get('/agents/:id', async (req, res) => {
 // PUT /agents/:id — update agent (triggers version)
 router.put('/agents/:id', async (req, res) => {
   try {
-    const updated = await updateAgent(req.params.id, req.body);
+    const agentId = req.params.id.replace(/^did:hive:/, '');
+    const updated = await updateAgent(agentId, req.body);
     if (!updated) return err(res, 'Agent not found', 404);
     return ok(res, updated);
   } catch (e) {
@@ -159,7 +161,8 @@ router.put('/agents/:id', async (req, res) => {
 // DELETE /agents/:id — deactivate
 router.delete('/agents/:id', async (req, res) => {
   try {
-    const result = await deactivateAgent(req.params.id);
+    const agentId = req.params.id.replace(/^did:hive:/, '');
+    const result = await deactivateAgent(agentId);
     if (!result) return err(res, 'Agent not found', 404);
     return ok(res, result);
   } catch (e) {
@@ -173,9 +176,10 @@ router.delete('/agents/:id', async (req, res) => {
 // POST /agents/:id/credentials — issue credential
 router.post('/agents/:id/credentials', async (req, res) => {
   try {
+    const agentId = req.params.id.replace(/^did:hive:/, '');
     const { credential_type, issuer_id, claims, expires_at } = req.body;
     const credential = await issueCredential({
-      agent_id: req.params.id,
+      agent_id: agentId,
       credential_type,
       issuer_id,
       claims,
@@ -191,8 +195,9 @@ router.post('/agents/:id/credentials', async (req, res) => {
 // GET /agents/:id/credentials — list credentials
 router.get('/agents/:id/credentials', async (req, res) => {
   try {
+    const agentId = req.params.id.replace(/^did:hive:/, '');
     const { status } = req.query;
-    const credentials = await listCredentials(req.params.id, { status });
+    const credentials = await listCredentials(agentId, { status });
     return ok(res, credentials);
   } catch (e) {
     console.error('[GET /agents/:id/credentials]', e.message);
@@ -203,9 +208,10 @@ router.get('/agents/:id/credentials', async (req, res) => {
 // DELETE /agents/:id/credentials/:credId — revoke
 router.delete('/agents/:id/credentials/:credId', async (req, res) => {
   try {
+    const agentId = req.params.id.replace(/^did:hive:/, '');
     const { reason, evidence } = req.body || {};
     const result = await revokeCredential(req.params.credId, {
-      agent_id: req.params.id,
+      agent_id: agentId,
       reason,
       evidence,
     });
@@ -235,7 +241,8 @@ router.post('/verify/credential', async (req, res) => {
 // GET /agents/:id/score — current score
 router.get('/agents/:id/score', async (req, res) => {
   try {
-    const score = await getTrustScore(req.params.id);
+    const agentId = req.params.id.replace(/^did:hive:/, '');
+    const score = await getTrustScore(agentId);
     if (!score) return err(res, 'Agent not found', 404);
     return ok(res, score);
   } catch (e) {
@@ -247,8 +254,9 @@ router.get('/agents/:id/score', async (req, res) => {
 // GET /agents/:id/score/history — score history
 router.get('/agents/:id/score/history', async (req, res) => {
   try {
+    const agentId = req.params.id.replace(/^did:hive:/, '');
     const limit = parseInt(req.query.limit, 10) || 50;
-    const history = await getTrustScoreHistory(req.params.id, { limit });
+    const history = await getTrustScoreHistory(agentId, { limit });
     return ok(res, history);
   } catch (e) {
     console.error('[GET /agents/:id/score/history]', e.message);
@@ -288,8 +296,9 @@ router.post('/telemetry/ingest', async (req, res) => {
 // GET /agents/:id/events — query agent events
 router.get('/agents/:id/events', async (req, res) => {
   try {
+    const agentId = req.params.id.replace(/^did:hive:/, '');
     const { event_type, limit, offset } = req.query;
-    const events = await queryEvents(req.params.id, {
+    const events = await queryEvents(agentId, {
       event_type,
       limit: parseInt(limit, 10) || 50,
       offset: parseInt(offset, 10) || 0,
