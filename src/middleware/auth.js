@@ -21,8 +21,10 @@ const PUBLIC_PATHS = [
 const PUBLIC_PREFIXES = [
   '/v1/verify_agent_risk',
   '/v1/stats',
+  '/v1/pricing',
   '/verify_agent_risk',
   '/stats',
+  '/pricing',
 ];
 
 function hashKey(rawKey) {

@@ -12,8 +12,11 @@ import cors from 'cors';
 import db from './db.js';
 import rateLimiter from './middleware/rate-limiter.js';
 import authMiddleware from './middleware/auth.js';
+import x402Middleware from './middleware/x402.js';
 import apiRouter from './routes/api.js';
+import pricingRouter from './routes/pricing.js';
 import { handleMcpRequest } from './mcp-server.js';
+import { getEngineStatus } from './services/pricing-engine.js';
 
 // ─── App Setup ────────────────────────────────────────────────
 
@@ -39,8 +42,12 @@ app.use(
   cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
-    exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset', 'Retry-After'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Payment-Hash', 'X-Subscription-Id'],
+    exposedHeaders: [
+      'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset', 'Retry-After',
+      'X-Payment-Amount', 'X-Payment-Currency', 'X-Payment-Network', 'X-Payment-Address',
+      'X-Payment-Model', 'X-Payment-Utilization', 'X-HiveTrust-Required', 'X-HiveTrust-Challenge',
+    ],
   })
 );
 
@@ -112,13 +119,27 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       'agent-insurance',
       'dispute-resolution',
       'federation',
+      'x402-payments',
+      'autonomous-pricing',
     ],
     compliance: ['W3C-DID', 'W3C-VC', 'EU-AI-Act', 'NIST-AI-RMF', 'IETF-A-JWT'],
+    payment: {
+      protocol: 'x402',
+      currency: 'USDC',
+      network: 'base',
+      pricing_model: 'autonomous',
+      primitives: ['eip1559_utilization', 'risk_adjusted_premium', 'dutch_auction', 'immutable_toll'],
+      pricing_endpoint: `${host}/v1/pricing/status`,
+      subscription_plans: `https://hivetrustiq.com/#pricing`,
+    },
     public_endpoints: [
       'GET /health',
       'GET /.well-known/hivetrust.json',
       'GET /v1/verify_agent_risk',
       'GET /v1/stats',
+      'GET /v1/pricing/status',
+      'GET /v1/pricing/quote',
+      'GET /v1/pricing/api-call',
     ],
     links: {
       docs: 'https://docs.hiveagentiq.com/hivetrust',
@@ -131,6 +152,15 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
 
 app.use('/v1', authMiddleware);
 app.use('/mcp', authMiddleware);
+
+// ─── x402 Payment Middleware (after auth, before routes) ──────
+// Gates paid endpoints behind x402 protocol or Stripe subscription
+
+app.use('/v1', x402Middleware);
+
+// ─── Pricing Routes (public, no payment required) ─────────────
+
+app.use('/v1/pricing', pricingRouter);
 
 // ─── MCP JSON-RPC Endpoint ────────────────────────────────────
 
