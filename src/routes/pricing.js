@@ -8,6 +8,7 @@
  */
 
 import { Router } from 'express';
+import Stripe from 'stripe';
 import {
   getApiCallPrice,
   getInsurancePremium,
@@ -15,6 +16,37 @@ import {
   getProtocolToll,
   getEngineStatus,
 } from '../services/pricing-engine.js';
+import { paymentCache } from '../middleware/x402.js';
+
+// ─── Stripe Client ──────────────────────────────────────────
+
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY)
+  : null;
+
+// Map Stripe price IDs to plan names
+const PRICE_TO_PLAN = {
+  'price_1TLbA9LyXpiMYLtrrE5FvRtR': 'starter',
+  'price_1TLbAFLyXpiMYLtrFqeX9naU': 'builder',
+  'price_1TLbAFLyXpiMYLtrAQSLWpIo': 'enterprise',
+};
+
+/**
+ * Verify the X-Hive-Internal-Key header for cross-platform endpoints.
+ * Skipped in dev/test mode.
+ */
+function requireInternalKey(req, res) {
+  if (process.env.NODE_ENV !== 'production') return true;
+  const key = req.headers['x-hive-internal-key'];
+  if (!key || key !== process.env.HIVE_INTERNAL_KEY) {
+    res.status(403).json({
+      success: false,
+      error: 'Missing or invalid X-Hive-Internal-Key header',
+    });
+    return false;
+  }
+  return true;
+}
 
 const router = Router();
 
@@ -135,6 +167,118 @@ router.get('/quote', (req, res) => {
       },
       protocol: 'x402',
       version: '1.0',
+    },
+  });
+});
+
+// ─── GET /pricing/verify-subscription — Cross-platform subscription verification ─
+
+router.get('/verify-subscription', async (req, res) => {
+  if (!requireInternalKey(req, res)) return;
+
+  const { id } = req.query;
+  if (!id) {
+    return res.status(400).json({
+      success: false,
+      error: 'Required query param: id (Stripe subscription ID)',
+    });
+  }
+
+  // Accept test subscriptions in dev/test mode
+  if (id.startsWith('sub_test_') && process.env.NODE_ENV !== 'production') {
+    return res.json({
+      success: true,
+      data: { valid: true, plan: 'builder', status: 'active' },
+    });
+  }
+
+  // Verify via Stripe API
+  if (!stripe) {
+    return res.status(503).json({
+      success: false,
+      error: 'Stripe is not configured (missing STRIPE_SECRET_KEY)',
+    });
+  }
+
+  try {
+    const subscription = await stripe.subscriptions.retrieve(id);
+    const isActive = subscription.status === 'active' || subscription.status === 'trialing';
+    let plan = 'starter'; // default
+
+    // Resolve plan from subscription items
+    const items = subscription.items?.data || [];
+    for (const item of items) {
+      const priceId = item.price?.id;
+      if (priceId && PRICE_TO_PLAN[priceId]) {
+        plan = PRICE_TO_PLAN[priceId];
+        break;
+      }
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        valid: isActive,
+        plan,
+        status: isActive ? 'active' : 'inactive',
+      },
+    });
+  } catch (err) {
+    // Stripe throws for invalid/not-found subscription IDs
+    return res.json({
+      success: true,
+      data: { valid: false, plan: null, status: 'inactive' },
+    });
+  }
+});
+
+// ─── POST /pricing/verify-payment — Cross-platform payment verification ──
+
+router.post('/verify-payment', (req, res) => {
+  if (!requireInternalKey(req, res)) return;
+
+  const { hash, amount, source } = req.body;
+  if (!hash) {
+    return res.status(400).json({
+      success: false,
+      error: 'Required body field: hash (payment transaction hash)',
+    });
+  }
+
+  // Check cache for verified payment
+  if (paymentCache.has(hash)) {
+    const cached = paymentCache.get(hash);
+    return res.json({
+      success: true,
+      data: {
+        valid: cached.verified,
+        amount: cached.amount,
+        network: 'base',
+      },
+    });
+  }
+
+  // Accept test payments in dev/test mode
+  if (hash.startsWith('test_pay_') && process.env.NODE_ENV !== 'production') {
+    const testAmount = parseFloat(hash.split('_').pop()) || parseFloat(amount) || 0.001;
+    paymentCache.set(hash, { verified: true, amount: testAmount, timestamp: Date.now() });
+    return res.json({
+      success: true,
+      data: {
+        valid: true,
+        amount: testAmount,
+        network: 'base',
+      },
+    });
+  }
+
+  // Payment hash not found
+  return res.json({
+    success: true,
+    data: {
+      valid: false,
+      amount: 0,
+      network: 'base',
     },
   });
 });

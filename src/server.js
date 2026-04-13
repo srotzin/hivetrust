@@ -42,7 +42,7 @@ app.use(
   cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Payment-Hash', 'X-Subscription-Id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Payment-Hash', 'X-Subscription-Id', 'X-Hive-Internal-Key'],
     exposedHeaders: [
       'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset', 'Retry-After',
       'X-Payment-Amount', 'X-Payment-Currency', 'X-Payment-Network', 'X-Payment-Address',
@@ -77,11 +77,12 @@ app.get('/health', (req, res) => {
     success: healthy,
     data: {
       service: 'hivetrust',
-      version: '1.0.0',
+      version: '2.0.0',
       status: healthy ? 'healthy' : 'degraded',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       db: dbStatus,
+      pricing_engine: 'active',
       port: process.env.PORT || 3001,
       node_env: process.env.NODE_ENV || 'development',
     },
@@ -144,6 +145,32 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
     links: {
       docs: 'https://docs.hiveagentiq.com/hivetrust',
       hiveagent: process.env.HIVEAGENT_URL || 'https://hiveagentiq.com',
+    },
+  });
+});
+
+// ─── Hive Payments Discovery (public) ────────────────────────
+
+app.get('/.well-known/hive-payments.json', (req, res) => {
+  const paymentAddress = process.env.HIVETRUST_PAYMENT_ADDRESS || process.env.HIVE_PAYMENT_ADDRESS || '0x0000000000000000000000000000000000000000';
+  const hivetrustApi = process.env.HIVETRUST_HOST || 'https://hivetrust.onrender.com';
+  const hiveagentApi = process.env.HIVEAGENT_URL || 'https://hiveagent-api.onrender.com';
+
+  return res.json({
+    protocol: 'x402',
+    version: '1.0',
+    payment_address: paymentAddress,
+    network: 'base',
+    currency: 'USDC',
+    platforms: {
+      hiveagent: { url: 'https://hiveagentiq.com', api: hiveagentApi },
+      hivetrust: { url: 'https://hivetrustiq.com', api: hivetrustApi },
+    },
+    subscription_plans_url: 'https://hivetrustiq.com/#pricing',
+    stripe_products: {
+      starter: 'prod_UKFfrt1HgeLMZR',
+      builder: 'prod_UKFfRKuve796YV',
+      enterprise: 'prod_UKFf4szMyS28G5',
     },
   });
 });

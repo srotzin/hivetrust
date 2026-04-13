@@ -37,7 +37,10 @@ const FREE_ENDPOINTS = new Set([
   '/stats',
   '/pricing/status',
   '/pricing/quote',
+  '/pricing/verify-subscription',
+  '/pricing/verify-payment',
   '/.well-known/hivetrust.json',
+  '/.well-known/hive-payments.json',
 ]);
 
 // Endpoints exempt from x402 (handled by their own pricing, e.g. insurance has its own premium)
