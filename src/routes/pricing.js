@@ -134,7 +134,7 @@ router.post('/settlement-toll', (req, res) => {
 router.get('/quote', (req, res) => {
   const { endpoint, method } = req.query;
   const price = getApiCallPrice();
-  const paymentAddress = process.env.HIVETRUST_PAYMENT_ADDRESS || '0x0000000000000000000000000000000000000000';
+  const paymentAddress = HIVE_PAYMENT_ADDRESS || '0x0000000000000000000000000000000000000000';
 
   return res.json({
     success: true,
