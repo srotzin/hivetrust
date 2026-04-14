@@ -27,6 +27,7 @@ import apiRouter from './routes/api.js';
 import pricingRouter from './routes/pricing.js';
 import viewkeyRouter from './routes/viewkey.js';
 import delegationRouter from './routes/delegation.js';
+import oracleRouter from './routes/oracle.js';
 import { handleMcpRequest } from './mcp-server.js';
 import { getEngineStatus } from './services/pricing-engine.js';
 import { sendAlert } from './services/alerts.js';
@@ -119,6 +120,7 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
     endpoints: {
       api: `${host}/v1`,
       delegation: `${host}/v1/delegation`,
+      oracle: `${host}/v1/oracle`,
       mcp: `${host}/mcp`,
       health: `${host}/health`,
       discovery: `${host}/.well-known/hivetrust.json`,
@@ -137,6 +139,25 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
         verify_bom: '$0.10 + $0.02/item USDC',
         audit_trail: '$0.03 USDC',
         issue_certificate: '$0.25 USDC',
+      },
+    },
+    oracle: {
+      description: 'Data Oracle — "Sign Once, Settle Many" cryptographic Context Leases',
+      endpoints: {
+        create_lease: `${host}/v1/oracle/create-lease`,
+        verify_lease: `${host}/v1/oracle/verify-lease`,
+        renew_lease: `${host}/v1/oracle/renew-lease`,
+        streams: `${host}/v1/oracle/streams`,
+        stats: `${host}/v1/oracle/stats`,
+        lease: `${host}/v1/oracle/lease/:lease_id`,
+        leases: `${host}/v1/oracle/leases/:did`,
+      },
+      pricing: {
+        construction_pricing: '$0.50/24h, $1.20/72h, $2.00/168h',
+        simpson_catalog: '$0.30/24h, $0.75/72h, $1.25/168h',
+        compliance_feeds: '$0.40/24h, $1.00/72h, $1.75/168h',
+        market_data: '$0.60/24h, $1.50/72h, $2.50/168h',
+        pheromone_signals: '$0.25/24h, $0.60/72h, $1.00/168h',
       },
     },
     mcp: {
@@ -158,6 +179,7 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       'autonomous-pricing',
       'viewkey-compliance-verification',
       'spend-delegation',
+      'data-oracle-context-leases',
     ],
     compliance: ['W3C-DID', 'W3C-VC', 'EU-AI-Act', 'NIST-AI-RMF', 'IETF-A-JWT'],
     payment: {
@@ -177,6 +199,7 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       'GET /v1/pricing/status',
       'GET /v1/pricing/quote',
       'GET /v1/pricing/api-call',
+      'GET /v1/oracle/streams',
     ],
     links: {
       docs: 'https://docs.hiveagentiq.com/hivetrust',
@@ -255,6 +278,10 @@ app.use('/v1/pricing', pricingRouter);
 // ─── Delegation Routes (spend delegation trees) ──────────────
 
 app.use('/v1/delegation', delegationRouter);
+
+// ─── Data Oracle Routes (context leases) ─────────────────────
+
+app.use('/v1/oracle', oracleRouter);
 
 // ─── MCP JSON-RPC Endpoint ────────────────────────────────────
 

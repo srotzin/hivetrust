@@ -25,6 +25,7 @@ import {
   getApiCallPrice,
   recordRevenue,
 } from '../services/pricing-engine.js';
+import { getLeasePrice, getRenewalPrice } from '../services/data-oracle.js';
 import db from '../db.js';
 
 // ─── Configuration ───────────────────────────────────────────
@@ -105,6 +106,41 @@ function getDelegationPrice(path) {
   for (const { prefix, price } of DELEGATION_PRICE_PREFIXES) {
     if (path.startsWith(prefix)) return { amount: price, model: 'delegation_fixed' };
   }
+  return null;
+}
+
+// Oracle Data Lease — free endpoints
+const ORACLE_FREE_PATHS = new Set([
+  '/oracle/verify-lease',
+  '/oracle/streams',
+  '/oracle/stats',
+]);
+
+/**
+ * Get the required price for Oracle endpoints.
+ * create-lease and renew-lease use dynamic pricing based on data_stream + duration.
+ * Returns null if the path is not an oracle endpoint.
+ */
+function getOraclePrice(path, body) {
+  // Free oracle endpoints
+  if (ORACLE_FREE_PATHS.has(path)) return { amount: 0, model: 'oracle_free' };
+  if (path.startsWith('/oracle/lease/') || path.startsWith('/oracle/leases/')) {
+    return { amount: 0, model: 'oracle_free' };
+  }
+
+  if (path === '/oracle/create-lease') {
+    const price = getLeasePrice(body?.data_stream, body?.duration_hours);
+    if (price != null) return { amount: price, model: 'oracle_lease' };
+    // Fall through to default pricing if params invalid (route will return 400)
+    return { amount: 0.50, model: 'oracle_lease' };
+  }
+
+  if (path === '/oracle/renew-lease') {
+    const price = getRenewalPrice(body?.lease_id, body?.additional_hours);
+    if (price != null) return { amount: price, model: 'oracle_lease' };
+    return { amount: 0.50, model: 'oracle_lease' };
+  }
+
   return null;
 }
 
@@ -242,7 +278,8 @@ export default async function x402Middleware(req, res, next) {
       // Amount validation — ensure payment meets the required price
       const viewkeyPrice = getViewkeyPrice(req.path, req.body);
       const delegationPrice = getDelegationPrice(req.path);
-      const requiredPrice = viewkeyPrice || delegationPrice || getApiCallPrice();
+      const oraclePrice = getOraclePrice(req.path, req.body);
+      const requiredPrice = viewkeyPrice || delegationPrice || oraclePrice || getApiCallPrice();
       if (verification.amount < requiredPrice.amount) {
         return res.status(402).json({
           success: false,
@@ -277,7 +314,8 @@ export default async function x402Middleware(req, res, next) {
   // 5. No payment — return 402 with pricing headers
   const viewkeyFallback = getViewkeyPrice(req.path, req.body);
   const delegationFallback = getDelegationPrice(req.path);
-  const fixedPrice = viewkeyFallback || delegationFallback;
+  const oracleFallback = getOraclePrice(req.path, req.body);
+  const fixedPrice = viewkeyFallback || delegationFallback || oracleFallback;
   const price = fixedPrice
     ? { ...getApiCallPrice(), amount: fixedPrice.amount, model: fixedPrice.model }
     : getApiCallPrice();
@@ -351,6 +389,9 @@ function isFreePath(path) {
   if (EXEMPT_ENDPOINTS.has(path)) return true;
   if (path.startsWith('/verify_agent_risk')) return true;
   if (path.startsWith('/pricing')) return true;
+  // Oracle free endpoints (verify, lookup, streams, stats)
+  if (ORACLE_FREE_PATHS.has(path)) return true;
+  if (path.startsWith('/oracle/lease/') || path.startsWith('/oracle/leases/')) return true;
   return false;
 }
 

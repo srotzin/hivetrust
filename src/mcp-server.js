@@ -15,6 +15,7 @@ import {
 import { getQuote as getInsuranceQuote, bindPolicy as bindInsurance, fileClaim } from './services/insurance.js';
 import { fileDispute } from './services/disputes.js';
 import { getPlatformStats } from './services/stats.js';
+import { createLease as _createLease, getStreams as getOracleStreams } from './services/data-oracle.js';
 
 // Wrap positional-arg credential functions to accept objects
 const issueCredential = ({ agent_id, credential_type, issuer_id, claims, expires_at }) =>
@@ -501,6 +502,40 @@ const TOOLS = [
       idempotentHint: true,
     },
   },
+
+  {
+    name: 'hivetrust_create_lease',
+    description:
+      'Create a Data Oracle Context Lease — "Sign Once, Settle Many". ' +
+      'Grants unlimited access to a data stream for a fixed period (24h/72h/168h). ' +
+      'Returns a cryptographic lease token (SHA-256) for zero-friction verification. ' +
+      'Available streams: construction_pricing, simpson_catalog, compliance_feeds, market_data, pheromone_signals.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        lessee_did: {
+          type: 'string',
+          description: 'DID of the agent acquiring the lease (e.g. "did:hivetrust:abc123")',
+        },
+        data_stream: {
+          type: 'string',
+          enum: ['construction_pricing', 'simpson_catalog', 'compliance_feeds', 'market_data', 'pheromone_signals'],
+          description: 'The data stream to lease access to',
+        },
+        duration_hours: {
+          type: 'number',
+          enum: [24, 72, 168],
+          description: 'Lease duration in hours (24h, 72h, or 168h / 1 week)',
+        },
+      },
+      required: ['lessee_did', 'data_stream', 'duration_hours'],
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+  },
 ];
 
 // ─── JSON-RPC Error Codes ─────────────────────────────────────
@@ -622,6 +657,11 @@ async function executeTool(name, args) {
 
     case 'hivetrust_get_platform_stats': {
       return await getPlatformStats();
+    }
+
+    case 'hivetrust_create_lease': {
+      const { lessee_did, data_stream, duration_hours } = args;
+      return _createLease({ lessee_did, data_stream, duration_hours });
     }
 
     default:

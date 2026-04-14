@@ -23,9 +23,11 @@ const PUBLIC_PREFIXES = [
   '/v1/verify_agent_risk',
   '/v1/stats',
   '/v1/pricing',
+  '/v1/oracle/streams',
   '/verify_agent_risk',
   '/stats',
   '/pricing',
+  '/oracle/streams',
 ];
 
 function hashKey(rawKey) {
