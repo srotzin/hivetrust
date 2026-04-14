@@ -434,6 +434,19 @@ db.exec(`
     PRIMARY KEY (key, window_start)
   );
 
+  -- Compliance Proofs: ViewKey Audit Rail — structural code compliance proofs
+  CREATE TABLE IF NOT EXISTS compliance_proofs (
+    id TEXT PRIMARY KEY DEFAULT ('proof_' || lower(hex(randomblob(8)))),
+    project_id TEXT NOT NULL,
+    inspector_did TEXT,
+    proof_type TEXT NOT NULL,
+    proof_hash TEXT NOT NULL UNIQUE,
+    inputs_json TEXT,
+    result_json TEXT,
+    compliant BOOLEAN,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   -- Indexes
   CREATE INDEX IF NOT EXISTS idx_service_accounts_platform ON service_accounts(platform);
   CREATE INDEX IF NOT EXISTS idx_agents_owner ON agents(owner_id);
@@ -453,6 +466,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log(actor_id);
   CREATE INDEX IF NOT EXISTS idx_audit_log_resource ON audit_log(resource_type, resource_id);
   CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
+  CREATE INDEX IF NOT EXISTS idx_proofs_project ON compliance_proofs(project_id);
+  CREATE INDEX IF NOT EXISTS idx_proofs_hash ON compliance_proofs(proof_hash);
 `);
 
 console.log('[HiveTrust] Database schema initialized');

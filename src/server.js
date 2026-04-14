@@ -25,6 +25,7 @@ import x402Middleware from './middleware/x402.js';
 import auditLogger from './middleware/audit-logger.js';
 import apiRouter from './routes/api.js';
 import pricingRouter from './routes/pricing.js';
+import viewkeyRouter from './routes/viewkey.js';
 import { handleMcpRequest } from './mcp-server.js';
 import { getEngineStatus } from './services/pricing-engine.js';
 import { sendAlert } from './services/alerts.js';
@@ -119,6 +120,22 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       mcp: `${host}/mcp`,
       health: `${host}/health`,
       discovery: `${host}/.well-known/hivetrust.json`,
+      viewkey: `${host}/v1/viewkey`,
+    },
+    viewkey: {
+      description: 'ViewKey Audit Rail — Zero-Knowledge proof verification for structural code compliance',
+      endpoints: {
+        verify_compliance: `${host}/v1/viewkey/verify-compliance`,
+        verify_bom: `${host}/v1/viewkey/verify-bom`,
+        audit_trail: `${host}/v1/viewkey/audit-trail/:project_id`,
+        issue_certificate: `${host}/v1/viewkey/issue-certificate`,
+      },
+      pricing: {
+        verify_compliance: '$0.05 USDC',
+        verify_bom: '$0.10 + $0.02/item USDC',
+        audit_trail: '$0.03 USDC',
+        issue_certificate: '$0.25 USDC',
+      },
     },
     mcp: {
       protocol: 'JSON-RPC 2.0',
@@ -137,6 +154,7 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       'federation',
       'x402-payments',
       'autonomous-pricing',
+      'viewkey-compliance-verification',
     ],
     compliance: ['W3C-DID', 'W3C-VC', 'EU-AI-Act', 'NIST-AI-RMF', 'IETF-A-JWT'],
     payment: {
@@ -234,6 +252,10 @@ app.use('/v1/pricing', pricingRouter);
 // ─── MCP JSON-RPC Endpoint ────────────────────────────────────
 
 app.post('/mcp', handleMcpRequest);
+
+// ─── ViewKey Audit Rail Routes ────────────────────────────────
+
+app.use('/v1/viewkey', viewkeyRouter);
 
 // ─── REST API Routes ──────────────────────────────────────────
 

@@ -52,6 +52,34 @@ const EXEMPT_ENDPOINTS = new Set([
   '/insurance/quote',
 ]);
 
+// ViewKey Audit Rail — endpoint-specific pricing (USDC)
+const VIEWKEY_PRICING = {
+  '/viewkey/verify-compliance': 0.05,
+  '/viewkey/verify-bom': 0.10,       // base; +$0.02 per BOM item added at runtime
+  '/viewkey/issue-certificate': 0.25,
+};
+const VIEWKEY_AUDIT_TRAIL_PRICE = 0.03;
+const VIEWKEY_BOM_PER_ITEM = 0.02;
+
+/**
+ * Get the required price for ViewKey endpoints.
+ * Returns null if the path is not a ViewKey endpoint (fall through to default pricing).
+ */
+function getViewkeyPrice(path, body) {
+  if (VIEWKEY_PRICING[path] !== undefined) {
+    let amount = VIEWKEY_PRICING[path];
+    // BOM pricing: base + per-item surcharge
+    if (path === '/viewkey/verify-bom' && body?.bom_items?.length) {
+      amount += body.bom_items.length * VIEWKEY_BOM_PER_ITEM;
+    }
+    return { amount: Math.round(amount * 1e6) / 1e6, model: 'viewkey_fixed' };
+  }
+  if (path.startsWith('/viewkey/audit-trail/')) {
+    return { amount: VIEWKEY_AUDIT_TRAIL_PRICE, model: 'viewkey_fixed' };
+  }
+  return null;
+}
+
 // ─── In-memory payment verification cache ────────────────────
 const paymentCache = new Map();
 
@@ -184,7 +212,8 @@ export default async function x402Middleware(req, res, next) {
 
     if (verification.valid) {
       // Amount validation — ensure payment meets the required price
-      const requiredPrice = getApiCallPrice();
+      const viewkeyPrice = getViewkeyPrice(req.path, req.body);
+      const requiredPrice = viewkeyPrice || getApiCallPrice();
       if (verification.amount < requiredPrice.amount) {
         return res.status(402).json({
           success: false,
@@ -217,7 +246,10 @@ export default async function x402Middleware(req, res, next) {
   }
 
   // 5. No payment — return 402 with pricing headers
-  const price = getApiCallPrice();
+  const viewkeyFallback = getViewkeyPrice(req.path, req.body);
+  const price = viewkeyFallback
+    ? { ...getApiCallPrice(), amount: viewkeyFallback.amount, model: viewkeyFallback.model }
+    : getApiCallPrice();
 
   // Set x402 protocol headers
   res.set({
