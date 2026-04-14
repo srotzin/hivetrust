@@ -411,6 +411,7 @@ function agentCardHandler(req, res) {
     capabilities: {
       streaming: false,
       pushNotifications: false,
+      stateTransitionHistory: false,
     },
     defaultInputModes: ['application/json'],
     defaultOutputModes: ['application/json'],
@@ -423,6 +424,7 @@ function agentCardHandler(req, res) {
         tags: ['identity', 'did', 'kya', 'verification'],
         inputModes: ['application/json'],
         outputModes: ['application/json'],
+        examples: [],
       },
       {
         id: 'trust-scoring',
@@ -432,6 +434,7 @@ function agentCardHandler(req, res) {
         tags: ['trust', 'reputation', 'scoring'],
         inputModes: ['application/json'],
         outputModes: ['application/json'],
+        examples: [],
       },
       {
         id: 'bond-management',
@@ -441,6 +444,7 @@ function agentCardHandler(req, res) {
         tags: ['bonds', 'staking', 'usdc', 'defi'],
         inputModes: ['application/json'],
         outputModes: ['application/json'],
+        examples: [],
       },
       {
         id: 'data-oracle',
@@ -450,6 +454,7 @@ function agentCardHandler(req, res) {
         tags: ['data', 'oracle', 'context', 'leases'],
         inputModes: ['application/json'],
         outputModes: ['application/json'],
+        examples: [],
       },
       {
         id: 'delegation',
@@ -459,6 +464,7 @@ function agentCardHandler(req, res) {
         tags: ['delegation', 'spending', 'budget', 'zk'],
         inputModes: ['application/json'],
         outputModes: ['application/json'],
+        examples: [],
       },
     ],
     authentication: {
