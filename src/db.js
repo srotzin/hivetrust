@@ -417,6 +417,23 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now'))
   );
 
+  -- Spent Payments: Persistent payment replay protection
+  CREATE TABLE IF NOT EXISTS spent_payments (
+    tx_hash TEXT PRIMARY KEY,
+    amount_usdc REAL NOT NULL,
+    verified_at TEXT DEFAULT (datetime('now')),
+    endpoint TEXT,
+    did TEXT
+  );
+
+  -- Rate Limits: SQLite-backed per-key rate limiting
+  CREATE TABLE IF NOT EXISTS rate_limits (
+    key TEXT NOT NULL,
+    window_start TEXT NOT NULL,
+    request_count INTEGER DEFAULT 1,
+    PRIMARY KEY (key, window_start)
+  );
+
   -- Indexes
   CREATE INDEX IF NOT EXISTS idx_service_accounts_platform ON service_accounts(platform);
   CREATE INDEX IF NOT EXISTS idx_agents_owner ON agents(owner_id);

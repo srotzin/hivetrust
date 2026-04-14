@@ -22,6 +22,7 @@ import db from './db.js';
 import rateLimiter from './middleware/rate-limiter.js';
 import authMiddleware from './middleware/auth.js';
 import x402Middleware from './middleware/x402.js';
+import auditLogger from './middleware/audit-logger.js';
 import apiRouter from './routes/api.js';
 import pricingRouter from './routes/pricing.js';
 import { handleMcpRequest } from './mcp-server.js';
@@ -215,6 +216,11 @@ app.post('/v1/auth/service-token', (req, res) => {
 
 app.use('/v1', authMiddleware);
 app.use('/mcp', authMiddleware);
+
+// ─── Audit Logging (after auth, captures actor identity) ─────
+
+app.use('/v1', auditLogger);
+app.use('/mcp', auditLogger);
 
 // ─── x402 Payment Middleware (after auth, before routes) ──────
 // Gates paid endpoints behind x402 protocol (USDC on Base L2)

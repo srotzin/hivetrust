@@ -16,6 +16,7 @@ import {
   getEngineStatus,
 } from '../services/pricing-engine.js';
 import { paymentCache } from '../middleware/x402.js';
+import ipAllowlist from '../middleware/ip-allowlist.js';
 
 // ─── Payment Configuration ──────────────────────────────────
 
@@ -32,12 +33,19 @@ const PLAN_TIERS = {
 
 /**
  * Verify the X-Hive-Internal-Key header for cross-platform endpoints.
- * Skipped in dev/test mode.
+ * Enforced in ALL environments (no dev bypass).
  */
 function requireInternalKey(req, res) {
-  if (process.env.NODE_ENV !== 'production') return true;
+  const expectedKey = process.env.HIVETRUST_SERVICE_KEY || process.env.HIVE_INTERNAL_KEY;
+  if (!expectedKey) {
+    res.status(403).json({
+      success: false,
+      error: 'Internal key not configured on server',
+    });
+    return false;
+  }
   const key = req.headers['x-hive-internal-key'];
-  if (!key || key !== process.env.HIVE_INTERNAL_KEY) {
+  if (!key || key !== expectedKey) {
     res.status(403).json({
       success: false,
       error: 'Missing or invalid X-Hive-Internal-Key header',
@@ -171,7 +179,7 @@ router.get('/quote', (req, res) => {
 
 // ─── GET /pricing/verify-subscription — Cross-platform subscription verification ─
 
-router.get('/verify-subscription', async (req, res) => {
+router.get('/verify-subscription', ipAllowlist, async (req, res) => {
   if (!requireInternalKey(req, res)) return;
 
   // Subscription verification is now handled via on-chain USDC payments.
@@ -191,7 +199,7 @@ router.get('/verify-subscription', async (req, res) => {
 
 // ─── POST /pricing/verify-payment — Cross-platform payment verification ──
 
-router.post('/verify-payment', (req, res) => {
+router.post('/verify-payment', ipAllowlist, (req, res) => {
   if (!requireInternalKey(req, res)) return;
 
   const { hash, amount, source } = req.body;
@@ -215,8 +223,8 @@ router.post('/verify-payment', (req, res) => {
     });
   }
 
-  // Accept test payments in dev/test mode
-  if (hash.startsWith('test_pay_') && process.env.NODE_ENV !== 'production') {
+  // Accept test payments only when explicitly enabled
+  if (hash.startsWith('test_pay_') && process.env.ALLOW_TEST_PAYMENTS === 'true') {
     const testAmount = parseFloat(hash.split('_').pop()) || parseFloat(amount) || 0.001;
     paymentCache.set(hash, { verified: true, amount: testAmount, timestamp: Date.now() });
     return res.json({
