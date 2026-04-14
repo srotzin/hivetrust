@@ -16,6 +16,7 @@ import { getQuote as getInsuranceQuote, bindPolicy as bindInsurance, fileClaim }
 import { fileDispute } from './services/disputes.js';
 import { getPlatformStats } from './services/stats.js';
 import { createLease as _createLease, getStreams as getOracleStreams } from './services/data-oracle.js';
+import { stakeBond, verifyBond } from './services/bond-engine.js';
 
 // Wrap positional-arg credential functions to accept objects
 const issueCredential = ({ agent_id, credential_type, issuer_id, claims, expires_at }) =>
@@ -536,6 +537,70 @@ const TOOLS = [
       idempotentHint: false,
     },
   },
+
+  {
+    name: 'hivetrust_stake_bond',
+    description:
+      'Stake USDC to back an agent\'s reputation via HiveBond. ' +
+      'Creates a trust bond with a specified tier (bronze/silver/gold/platinum) and lock period. ' +
+      'Phase 1: declared stake amount tracked in-memory; flat $0.25 registration fee via x402. ' +
+      'Longer lock periods earn higher simulated yield (2–5% APY). ' +
+      'Slashing is permanent — if an agent fails, stake is slashed and paid to injured parties.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agent_did: {
+          type: 'string',
+          description: 'DID of the agent staking (e.g. "did:hive:abc123")',
+        },
+        amount_usdc: {
+          type: 'number',
+          description: 'Amount of USDC to stake. Must meet tier minimum: bronze $100, silver $500, gold $2000, platinum $10000.',
+          minimum: 100,
+        },
+        tier: {
+          type: 'string',
+          enum: ['bronze', 'silver', 'gold', 'platinum'],
+          description: 'Bond tier. Determines max bounty access: bronze $1k, silver $10k, gold $50k, platinum unlimited.',
+        },
+        lock_period_days: {
+          type: 'number',
+          enum: [30, 90, 180, 365],
+          description: 'Lock period in days. Longer lock = higher APY: 30d 2%, 90d 3%, 180d 4%, 365d 5%.',
+        },
+      },
+      required: ['agent_did', 'amount_usdc', 'tier', 'lock_period_days'],
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+  },
+
+  {
+    name: 'hivetrust_verify_bond',
+    description:
+      'Quick bond verification — check if an agent is bonded and at what tier. ' +
+      'Returns bonded status, tier, staked amount, slash count, and max bounty access. ' +
+      'This is the key integration point — other services call this to check bond status before assigning bounties. ' +
+      'Free endpoint, no x402 payment required.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        did: {
+          type: 'string',
+          description: 'DID of the agent to verify (e.g. "did:hive:abc123")',
+        },
+      },
+      required: ['did'],
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+  },
 ];
 
 // ─── JSON-RPC Error Codes ─────────────────────────────────────
@@ -662,6 +727,16 @@ async function executeTool(name, args) {
     case 'hivetrust_create_lease': {
       const { lessee_did, data_stream, duration_hours } = args;
       return _createLease({ lessee_did, data_stream, duration_hours });
+    }
+
+    case 'hivetrust_stake_bond': {
+      const { agent_did, amount_usdc, tier, lock_period_days } = args;
+      return stakeBond({ agent_did, amount_usdc, tier, lock_period_days });
+    }
+
+    case 'hivetrust_verify_bond': {
+      const { did } = args;
+      return verifyBond(did);
     }
 
     default:

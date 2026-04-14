@@ -116,6 +116,38 @@ const ORACLE_FREE_PATHS = new Set([
   '/oracle/stats',
 ]);
 
+// Bond — endpoint-specific pricing (USDC)
+// Phase 1: flat $0.25 registration fee on /stake and /upgrade-tier; $0.10 on /unstake
+const BOND_PRICING = {
+  '/bond/stake':        0.25,
+  '/bond/upgrade-tier': 0.25,
+  '/bond/unstake':      0.10,
+};
+
+// Bond free endpoints (slash is internal-key only, rest are free lookups)
+const BOND_FREE_PATHS = new Set([
+  '/bond/tiers',
+  '/bond/leaderboard',
+  '/bond/pool',
+  '/bond/slash',
+]);
+
+/**
+ * Get the required price for Bond endpoints.
+ * Returns null if the path is not a bond endpoint.
+ */
+function getBondPrice(path) {
+  if (BOND_PRICING[path] !== undefined) {
+    return { amount: BOND_PRICING[path], model: 'bond_fixed' };
+  }
+  if (BOND_FREE_PATHS.has(path)) return { amount: 0, model: 'bond_free' };
+  // /bond/agent/:did and /bond/verify/:did are free lookups
+  if (path.startsWith('/bond/agent/') || path.startsWith('/bond/verify/')) {
+    return { amount: 0, model: 'bond_free' };
+  }
+  return null;
+}
+
 /**
  * Get the required price for Oracle endpoints.
  * create-lease and renew-lease use dynamic pricing based on data_stream + duration.
@@ -279,7 +311,8 @@ export default async function x402Middleware(req, res, next) {
       const viewkeyPrice = getViewkeyPrice(req.path, req.body);
       const delegationPrice = getDelegationPrice(req.path);
       const oraclePrice = getOraclePrice(req.path, req.body);
-      const requiredPrice = viewkeyPrice || delegationPrice || oraclePrice || getApiCallPrice();
+      const bondPrice = getBondPrice(req.path);
+      const requiredPrice = viewkeyPrice || delegationPrice || oraclePrice || bondPrice || getApiCallPrice();
       if (verification.amount < requiredPrice.amount) {
         return res.status(402).json({
           success: false,
@@ -315,7 +348,8 @@ export default async function x402Middleware(req, res, next) {
   const viewkeyFallback = getViewkeyPrice(req.path, req.body);
   const delegationFallback = getDelegationPrice(req.path);
   const oracleFallback = getOraclePrice(req.path, req.body);
-  const fixedPrice = viewkeyFallback || delegationFallback || oracleFallback;
+  const bondFallback = getBondPrice(req.path);
+  const fixedPrice = viewkeyFallback || delegationFallback || oracleFallback || bondFallback;
   const price = fixedPrice
     ? { ...getApiCallPrice(), amount: fixedPrice.amount, model: fixedPrice.model }
     : getApiCallPrice();
@@ -392,6 +426,9 @@ function isFreePath(path) {
   // Oracle free endpoints (verify, lookup, streams, stats)
   if (ORACLE_FREE_PATHS.has(path)) return true;
   if (path.startsWith('/oracle/lease/') || path.startsWith('/oracle/leases/')) return true;
+  // Bond free endpoints (tiers, leaderboard, pool, slash, verify, agent lookup)
+  if (BOND_FREE_PATHS.has(path)) return true;
+  if (path.startsWith('/bond/agent/') || path.startsWith('/bond/verify/')) return true;
   return false;
 }
 

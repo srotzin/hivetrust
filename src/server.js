@@ -28,6 +28,7 @@ import pricingRouter from './routes/pricing.js';
 import viewkeyRouter from './routes/viewkey.js';
 import delegationRouter from './routes/delegation.js';
 import oracleRouter from './routes/oracle.js';
+import bondRouter from './routes/bond.js';
 import { handleMcpRequest } from './mcp-server.js';
 import { getEngineStatus } from './services/pricing-engine.js';
 import { sendAlert } from './services/alerts.js';
@@ -121,6 +122,7 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       api: `${host}/v1`,
       delegation: `${host}/v1/delegation`,
       oracle: `${host}/v1/oracle`,
+      bond: `${host}/v1/bond`,
       mcp: `${host}/mcp`,
       health: `${host}/health`,
       discovery: `${host}/.well-known/hivetrust.json`,
@@ -160,6 +162,37 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
         pheromone_signals: '$0.25/24h, $0.60/72h, $1.00/168h',
       },
     },
+    bond: {
+      description: 'HiveBond — Trust Staking Layer. Agents stake USDC to back their reputation.',
+      endpoints: {
+        stake: `${host}/v1/bond/stake`,
+        agent: `${host}/v1/bond/agent/:did`,
+        slash: `${host}/v1/bond/slash`,
+        unstake: `${host}/v1/bond/unstake`,
+        tiers: `${host}/v1/bond/tiers`,
+        leaderboard: `${host}/v1/bond/leaderboard`,
+        pool: `${host}/v1/bond/pool`,
+        upgrade_tier: `${host}/v1/bond/upgrade-tier`,
+        verify: `${host}/v1/bond/verify/:did`,
+      },
+      pricing: {
+        stake: '$0.25 USDC flat registration fee',
+        upgrade_tier: '$0.25 USDC flat fee',
+        unstake: '$0.10 USDC processing fee',
+        slash: 'FREE (internal — HiveLaw only)',
+        agent: 'FREE',
+        tiers: 'FREE (public)',
+        leaderboard: 'FREE',
+        pool: 'FREE',
+        verify: 'FREE (frictionless for principals)',
+      },
+      tiers: {
+        bronze: { min_usdc: 100, max_bounty_access: 1000 },
+        silver: { min_usdc: 500, max_bounty_access: 10000 },
+        gold: { min_usdc: 2000, max_bounty_access: 50000 },
+        platinum: { min_usdc: 10000, max_bounty_access: 'unlimited' },
+      },
+    },
     mcp: {
       protocol: 'JSON-RPC 2.0',
       endpoint: `${host}/mcp`,
@@ -180,6 +213,7 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       'viewkey-compliance-verification',
       'spend-delegation',
       'data-oracle-context-leases',
+      'trust-staking-bonds',
     ],
     compliance: ['W3C-DID', 'W3C-VC', 'EU-AI-Act', 'NIST-AI-RMF', 'IETF-A-JWT'],
     payment: {
@@ -200,6 +234,8 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       'GET /v1/pricing/quote',
       'GET /v1/pricing/api-call',
       'GET /v1/oracle/streams',
+      'GET /v1/bond/tiers',
+      'GET /v1/bond/verify/:did',
     ],
     links: {
       docs: 'https://docs.hiveagentiq.com/hivetrust',
@@ -282,6 +318,10 @@ app.use('/v1/delegation', delegationRouter);
 // ─── Data Oracle Routes (context leases) ─────────────────────
 
 app.use('/v1/oracle', oracleRouter);
+
+// ─── Bond Routes (trust staking layer) ───────────────────────
+
+app.use('/v1/bond', bondRouter);
 
 // ─── MCP JSON-RPC Endpoint ────────────────────────────────────
 
