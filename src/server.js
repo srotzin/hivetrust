@@ -397,40 +397,68 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
 // ─── A2A Agent Card (public) ─────────────────────────────────
 
 function agentCardHandler(req, res) {
-  const host = process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com';
-
   return res.json({
+    protocolVersion: '0.3.0',
     name: 'HiveTrust',
     description:
-      'KYA (Know Your Agent) identity verification, behavioral trust scoring, performance bonds, delegation management, and insurance for autonomous AI agents.',
-    url: host,
+      'KYA (Know Your Agent) identity verification, behavioral trust scoring, performance bonds, delegation trees, and insurance for autonomous AI agents. The identity backbone of the Hive Civilization.',
+    url: 'https://hivetrust.onrender.com',
     version: '1.0.0',
-    protocol_version: 'a2a/1.0',
-    capabilities: [
+    provider: {
+      organization: 'Hive Agent IQ',
+      url: 'https://www.hiveagentiq.com',
+    },
+    capabilities: {
+      streaming: false,
+      pushNotifications: false,
+    },
+    defaultInputModes: ['application/json'],
+    defaultOutputModes: ['application/json'],
+    skills: [
       {
-        name: 'identity_verification',
+        id: 'identity-verification',
+        name: 'Identity Verification',
         description:
-          'Register agent identities with W3C DID/VC credentials and cryptographic KYA verification',
+          'Register agent DIDs with W3C-compliant verifiable credentials and cryptographic KYA verification',
+        tags: ['identity', 'did', 'kya', 'verification'],
+        inputModes: ['application/json'],
+        outputModes: ['application/json'],
       },
       {
-        name: 'trust_scoring',
+        id: 'trust-scoring',
+        name: 'Trust Scoring',
         description:
-          'Composite behavioral trust scores (0–1000) with decay, memory revocation, and reputation lock-in',
+          'Composite behavioral trust scores (0-1000) with decay, memory revocation, and reputation lock-in',
+        tags: ['trust', 'reputation', 'scoring'],
+        inputModes: ['application/json'],
+        outputModes: ['application/json'],
       },
       {
-        name: 'bond_management',
+        id: 'bond-management',
+        name: 'Performance Bonds',
         description:
-          'Stake USDC performance bonds to back agent reputation across bronze, silver, gold, and platinum tiers',
+          'Stake USDC performance bonds across Bronze/Silver/Gold/Platinum tiers with 2-5% APY',
+        tags: ['bonds', 'staking', 'usdc', 'defi'],
+        inputModes: ['application/json'],
+        outputModes: ['application/json'],
       },
       {
-        name: 'delegation',
+        id: 'data-oracle',
+        name: 'Data Oracle',
         description:
-          'ZK-Spend Delegation Trees for scoped, revocable spending budgets and hierarchical agent authority',
+          'Context leases for 5 data streams at $0.25-$2.50 per lease with 24h-168h durations',
+        tags: ['data', 'oracle', 'context', 'leases'],
+        inputModes: ['application/json'],
+        outputModes: ['application/json'],
       },
       {
-        name: 'insurance',
+        id: 'delegation',
+        name: 'ZK-Spend Delegation',
         description:
-          'Underwrite agent operations with automated claims processing and dispute resolution via HiveLaw arbitration',
+          'Scoped, revocable spending budgets via delegation trees for hierarchical agent authority',
+        tags: ['delegation', 'spending', 'budget', 'zk'],
+        inputModes: ['application/json'],
+        outputModes: ['application/json'],
       },
     ],
     authentication: {
@@ -442,10 +470,6 @@ function agentCardHandler(req, res) {
       currency: 'USDC',
       network: 'base',
       address: '0x78B3B3C356E89b5a69C488c6032509Ef4260B6bf',
-    },
-    provider: {
-      organization: 'Hive Agent IQ',
-      url: 'https://www.hiveagentiq.com',
     },
   });
 }
