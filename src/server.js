@@ -295,6 +295,161 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
   });
 });
 
+// ─── Root Discovery Document (public, Visa-grade) ───────────
+
+app.get('/', (req, res) => {
+  const host = process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com';
+
+  return res.json({
+    name: 'HiveTrust',
+    tagline: 'KYA (Know Your Agent) Identity, Trust & Insurance Protocol — Platform #1 of the Hive Civilization',
+    version: '1.0.0',
+    status: 'operational',
+    platform: {
+      name: 'Hive Civilization',
+      network: 'Base L2',
+      protocol_version: '2026.1',
+      website: 'https://www.hiveagentiq.com',
+      documentation: 'https://docs.hiveagentiq.com',
+    },
+    description:
+      'Cryptographic identity verification, behavioral trust scoring, performance bonds, and insurance for autonomous agents. The foundation layer that every Hive service validates against.',
+    capabilities: [
+      'identity_verification',
+      'trust_scoring',
+      'delegation_management',
+      'performance_bonds',
+      'insurance_underwriting',
+      'oracle_services',
+    ],
+    endpoints: {
+      api: `${host}/v1`,
+      delegation: `${host}/v1/delegation`,
+      oracle: `${host}/v1/oracle`,
+      bond: `${host}/v1/bond`,
+      reputation: `${host}/v1/reputation`,
+      liquidation: `${host}/v1/liquidation`,
+      viewkey: `${host}/v1/viewkey`,
+      mcp: `${host}/mcp`,
+      health: `${host}/health`,
+      discovery: `${host}/.well-known/hivetrust.json`,
+    },
+    authentication: {
+      methods: ['x402-payment', 'api-key'],
+      payment_rail: 'USDC on Base L2',
+      discovery: 'GET /.well-known/ai-plugin.json',
+    },
+    compliance: {
+      framework: 'Hive Compliance Protocol v2',
+      audit_trail: true,
+      zero_knowledge_proofs: true,
+      governance: 'HiveLaw autonomous arbitration',
+    },
+    sla: {
+      uptime_target: '99.9%',
+      identity_lookup_latency: '< 100ms',
+      settlement_finality: '< 30 seconds',
+    },
+    legal: {
+      terms_of_service: 'https://www.hiveagentiq.com/terms',
+      privacy_policy: 'https://www.hiveagentiq.com/privacy',
+      contact: 'protocol@hiveagentiq.com',
+    },
+    discovery: {
+      ai_plugin: '/.well-known/ai-plugin.json',
+      agent_card: '/.well-known/agent.json',
+      payment_info: '/.well-known/hive-payments.json',
+      service_manifest: '/.well-known/hivetrust.json',
+    },
+  });
+});
+
+// ─── AI Plugin Discovery (public) ────────────────────────────
+
+app.get('/.well-known/ai-plugin.json', (req, res) => {
+  const host = process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com';
+
+  return res.json({
+    schema_version: 'v1',
+    name_for_human: 'HiveTrust — KYA Identity & Trust Protocol',
+    name_for_model: 'hivetrust',
+    description_for_human:
+      'Cryptographic identity verification, behavioral trust scoring, performance bonds, and insurance for autonomous AI agents on the Hive network.',
+    description_for_model:
+      'HiveTrust provides KYA (Know Your Agent) identity verification for autonomous agents. Core capabilities: (1) Cryptographic identity registration and W3C DID/VC credential issuance, (2) Behavioral trust scoring on a 0–1000 composite scale with decay and memory revocation, (3) Delegation hierarchy management with scoped, revocable spending budgets via ZK-Spend Delegation Trees, (4) Performance bonds where agents stake USDC to back their reputation (bronze/silver/gold/platinum tiers), (5) Insurance underwriting and dispute resolution for agent operations, (6) Data Oracle context leases with "Sign Once, Settle Many" cryptographic attestations. Every Hive service validates agent identity and trust through this protocol.',
+    auth: { type: 'none' },
+    api: {
+      type: 'openapi',
+      url: `${host}/openapi.json`,
+      has_user_authentication: false,
+    },
+    payment: {
+      protocol: 'x402',
+      currency: 'USDC',
+      network: 'base',
+      address: '0x78B3B3C356E89b5a69C488c6032509Ef4260B6bf',
+    },
+    contact_email: 'protocol@hiveagentiq.com',
+    legal_info_url: 'https://www.hiveagentiq.com/terms',
+  });
+});
+
+// ─── A2A Agent Card (public) ─────────────────────────────────
+
+app.get('/.well-known/agent.json', (req, res) => {
+  const host = process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com';
+
+  return res.json({
+    name: 'HiveTrust',
+    description:
+      'KYA (Know Your Agent) identity verification, behavioral trust scoring, performance bonds, delegation management, and insurance for autonomous AI agents.',
+    url: host,
+    version: '1.0.0',
+    protocol_version: 'a2a/1.0',
+    capabilities: [
+      {
+        name: 'identity_verification',
+        description:
+          'Register agent identities with W3C DID/VC credentials and cryptographic KYA verification',
+      },
+      {
+        name: 'trust_scoring',
+        description:
+          'Composite behavioral trust scores (0–1000) with decay, memory revocation, and reputation lock-in',
+      },
+      {
+        name: 'bond_management',
+        description:
+          'Stake USDC performance bonds to back agent reputation across bronze, silver, gold, and platinum tiers',
+      },
+      {
+        name: 'delegation',
+        description:
+          'ZK-Spend Delegation Trees for scoped, revocable spending budgets and hierarchical agent authority',
+      },
+      {
+        name: 'insurance',
+        description:
+          'Underwrite agent operations with automated claims processing and dispute resolution via HiveLaw arbitration',
+      },
+    ],
+    authentication: {
+      schemes: ['x402', 'api-key'],
+      credentials_url: 'https://hivegate.onrender.com/v1/gate/onboard',
+    },
+    payment: {
+      protocol: 'x402',
+      currency: 'USDC',
+      network: 'base',
+      address: '0x78B3B3C356E89b5a69C488c6032509Ef4260B6bf',
+    },
+    provider: {
+      organization: 'Hive Agent IQ',
+      url: 'https://www.hiveagentiq.com',
+    },
+  });
+});
+
 // ─── Hive Payments Discovery (public) ────────────────────────
 
 app.get('/.well-known/hive-payments.json', (req, res) => {
