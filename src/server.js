@@ -26,6 +26,7 @@ import auditLogger from './middleware/audit-logger.js';
 import apiRouter from './routes/api.js';
 import pricingRouter from './routes/pricing.js';
 import viewkeyRouter from './routes/viewkey.js';
+import delegationRouter from './routes/delegation.js';
 import { handleMcpRequest } from './mcp-server.js';
 import { getEngineStatus } from './services/pricing-engine.js';
 import { sendAlert } from './services/alerts.js';
@@ -117,6 +118,7 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
     host,
     endpoints: {
       api: `${host}/v1`,
+      delegation: `${host}/v1/delegation`,
       mcp: `${host}/mcp`,
       health: `${host}/health`,
       discovery: `${host}/.well-known/hivetrust.json`,
@@ -155,6 +157,7 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       'x402-payments',
       'autonomous-pricing',
       'viewkey-compliance-verification',
+      'spend-delegation',
     ],
     compliance: ['W3C-DID', 'W3C-VC', 'EU-AI-Act', 'NIST-AI-RMF', 'IETF-A-JWT'],
     payment: {
@@ -248,6 +251,10 @@ app.use('/v1', x402Middleware);
 // ─── Pricing Routes (public, no payment required) ─────────────
 
 app.use('/v1/pricing', pricingRouter);
+
+// ─── Delegation Routes (spend delegation trees) ──────────────
+
+app.use('/v1/delegation', delegationRouter);
 
 // ─── MCP JSON-RPC Endpoint ────────────────────────────────────
 

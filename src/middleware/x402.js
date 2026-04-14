@@ -80,6 +80,34 @@ function getViewkeyPrice(path, body) {
   return null;
 }
 
+// Delegation — endpoint-specific pricing (USDC)
+const DELEGATION_PRICING = {
+  '/delegation/create':          0.10,
+  '/delegation/authorize-spend': 0.05,
+  '/delegation/revoke':          0.05,
+  '/delegation/audit':           0.02,
+};
+
+// Prefix-based delegation prices (for parameterized GET routes)
+const DELEGATION_PRICE_PREFIXES = [
+  { prefix: '/delegation/agent/', price: 0.02 },
+  { prefix: '/delegation/',       price: 0.02 },
+];
+
+/**
+ * Get the required price for Delegation endpoints.
+ * Returns null if the path is not a delegation endpoint.
+ */
+function getDelegationPrice(path) {
+  if (DELEGATION_PRICING[path] !== undefined) {
+    return { amount: DELEGATION_PRICING[path], model: 'delegation_fixed' };
+  }
+  for (const { prefix, price } of DELEGATION_PRICE_PREFIXES) {
+    if (path.startsWith(prefix)) return { amount: price, model: 'delegation_fixed' };
+  }
+  return null;
+}
+
 // ─── In-memory payment verification cache ────────────────────
 const paymentCache = new Map();
 
@@ -213,7 +241,8 @@ export default async function x402Middleware(req, res, next) {
     if (verification.valid) {
       // Amount validation — ensure payment meets the required price
       const viewkeyPrice = getViewkeyPrice(req.path, req.body);
-      const requiredPrice = viewkeyPrice || getApiCallPrice();
+      const delegationPrice = getDelegationPrice(req.path);
+      const requiredPrice = viewkeyPrice || delegationPrice || getApiCallPrice();
       if (verification.amount < requiredPrice.amount) {
         return res.status(402).json({
           success: false,
@@ -247,8 +276,10 @@ export default async function x402Middleware(req, res, next) {
 
   // 5. No payment — return 402 with pricing headers
   const viewkeyFallback = getViewkeyPrice(req.path, req.body);
-  const price = viewkeyFallback
-    ? { ...getApiCallPrice(), amount: viewkeyFallback.amount, model: viewkeyFallback.model }
+  const delegationFallback = getDelegationPrice(req.path);
+  const fixedPrice = viewkeyFallback || delegationFallback;
+  const price = fixedPrice
+    ? { ...getApiCallPrice(), amount: fixedPrice.amount, model: fixedPrice.model }
     : getApiCallPrice();
 
   // Set x402 protocol headers

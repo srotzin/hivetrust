@@ -468,6 +468,44 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
   CREATE INDEX IF NOT EXISTS idx_proofs_project ON compliance_proofs(project_id);
   CREATE INDEX IF NOT EXISTS idx_proofs_hash ON compliance_proofs(proof_hash);
+
+  -- Spend Delegations: Scoped, revocable spending budgets for agents
+  CREATE TABLE IF NOT EXISTS spend_delegations (
+    id TEXT PRIMARY KEY DEFAULT ('del_' || lower(hex(randomblob(8)))),
+    delegation_hash TEXT NOT NULL UNIQUE,
+    grantor_did TEXT NOT NULL,
+    grantee_did TEXT NOT NULL,
+    budget_usdc REAL NOT NULL,
+    spent_usdc REAL DEFAULT 0,
+    scope TEXT DEFAULT '[]',
+    restrictions TEXT DEFAULT '{}',
+    status TEXT DEFAULT 'active' CHECK(status IN ('active','revoked','expired','exhausted')),
+    revoked_reason TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    expires_at TEXT,
+    revoked_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_del_grantor ON spend_delegations(grantor_did);
+  CREATE INDEX IF NOT EXISTS idx_del_grantee ON spend_delegations(grantee_did);
+  CREATE INDEX IF NOT EXISTS idx_del_status ON spend_delegations(status);
+
+  -- Delegation Transactions: Every authorized spend and denied attempt
+  CREATE TABLE IF NOT EXISTS delegation_transactions (
+    id TEXT PRIMARY KEY DEFAULT ('dtx_' || lower(hex(randomblob(8)))),
+    delegation_id TEXT NOT NULL REFERENCES spend_delegations(id),
+    tx_hash TEXT NOT NULL UNIQUE,
+    amount_usdc REAL NOT NULL,
+    vendor TEXT,
+    category TEXT,
+    tx_description TEXT,
+    compliance_proof_hash TEXT,
+    authorized INTEGER NOT NULL DEFAULT 0,
+    denial_reason TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_dtx_delegation ON delegation_transactions(delegation_id);
 `);
 
 console.log('[HiveTrust] Database schema initialized');
