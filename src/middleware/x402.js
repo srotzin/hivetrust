@@ -55,33 +55,51 @@ const EXEMPT_ENDPOINTS = new Set([
 // ─── In-memory payment verification cache ────────────────────
 const paymentCache = new Map();
 
+// ─── Persistent Replay Protection ───────────────────────────
+// In-memory fast-path cache for spent payment hashes
+const spentPaymentsCache = new Set();
+
+/**
+ * Check if a payment hash has already been spent.
+ * Uses in-memory cache first (fast path), then falls back to persistent DB.
+ */
+function isPaymentSpent(txHash) {
+  if (spentPaymentsCache.has(txHash)) return true;
+  try {
+    const existing = db.prepare('SELECT 1 FROM spent_payments WHERE tx_hash = ?').get(txHash);
+    if (existing) {
+      spentPaymentsCache.add(txHash);
+      return true;
+    }
+  } catch (err) {
+    console.error('[x402] DB replay check error:', err.message);
+  }
+  return false;
+}
+
+/**
+ * Record a payment hash as spent in both in-memory cache and persistent DB.
+ */
+function recordSpentPayment(txHash, amountUsdc, endpoint, did) {
+  spentPaymentsCache.add(txHash);
+  try {
+    db.prepare(
+      'INSERT OR IGNORE INTO spent_payments (tx_hash, amount_usdc, endpoint, did) VALUES (?, ?, ?, ?)'
+    ).run(txHash, amountUsdc, endpoint || null, did || null);
+  } catch (err) {
+    console.error('[x402] DB spent_payment insert error:', err.message);
+  }
+}
+
 // ─── On-Chain Verification ───────────────────────────────────
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 
 /**
  * Verify a USDC payment on Base L2 via public RPC.
+ * NOTE: Replay protection is handled by isPaymentSpent() BEFORE calling this function.
  */
 async function verifyPayment(hash) {
-  // Check in-memory cache first (fast path)
-  if (paymentCache.has(hash)) {
-    const cached = paymentCache.get(hash);
-    if (cached.verified) {
-      return { valid: false, replay: true };
-    }
-    return { valid: false, reason: 'Payment previously rejected' };
-  }
-
-  // Check persistent DB for replay protection (survives restarts)
-  try {
-    const existing = db.prepare('SELECT tx_hash FROM spent_payments WHERE tx_hash = ?').get(hash);
-    if (existing) {
-      return { valid: false, replay: true };
-    }
-  } catch (err) {
-    console.error('[x402] DB replay check error:', err.message);
-  }
-
   if (!PAYMENT_ADDRESS || PAYMENT_ADDRESS === '0x0000000000000000000000000000000000000000') {
     return { valid: false, reason: 'Payment address not configured on server' };
   }
@@ -112,12 +130,6 @@ async function verifyPayment(hash) {
       const amountRaw = parseInt(log.data, 16);
       const amountUsdc = amountRaw / 1_000_000;
       paymentCache.set(hash, { verified: true, amount: amountUsdc, timestamp: Date.now() });
-      // Persist to DB for replay protection across restarts
-      try {
-        db.prepare('INSERT OR IGNORE INTO spent_payments (tx_hash, amount_usdc) VALUES (?, ?)').run(hash, amountUsdc);
-      } catch (err) {
-        console.error('[x402] DB payment insert error:', err.message);
-      }
       return { valid: true, amount: amountUsdc };
     }
     return { valid: false, reason: 'No USDC transfer to Hive payment address found in transaction' };
@@ -158,10 +170,8 @@ export default async function x402Middleware(req, res, next) {
   // 4. Check for x402 payment proof (USDC on Base L2)
   const paymentHash = req.headers['x-payment-hash'] || req.headers['x-402-tx'] || req.headers['x-payment-tx'];
   if (paymentHash) {
-    const verification = await verifyPayment(paymentHash);
-
-    // Replay detection — return 409 Conflict
-    if (verification.replay) {
+    // Replay detection — check BEFORE on-chain verification (fast path)
+    if (isPaymentSpent(paymentHash)) {
       return res.status(409).json({
         success: false,
         error: 'Payment hash already used',
@@ -169,6 +179,8 @@ export default async function x402Middleware(req, res, next) {
         hint: 'Each payment transaction can only be used once. Submit a new USDC payment for this request.',
       });
     }
+
+    const verification = await verifyPayment(paymentHash);
 
     if (verification.valid) {
       // Amount validation — ensure payment meets the required price
@@ -184,14 +196,8 @@ export default async function x402Middleware(req, res, next) {
         });
       }
 
-      // Persist spent payment with endpoint/DID context
-      try {
-        db.prepare(
-          'INSERT OR IGNORE INTO spent_payments (tx_hash, amount_usdc, endpoint, did) VALUES (?, ?, ?, ?)'
-        ).run(paymentHash, verification.amount, req.path, req.agentDid || null);
-      } catch (err) {
-        console.error('[x402] DB spent_payment insert error:', err.message);
-      }
+      // Record spent payment AFTER successful verification (persistent replay protection)
+      recordSpentPayment(paymentHash, verification.amount, req.path, req.agentDid || null);
 
       req.paymentVerified = true;
       req.paymentMethod = 'x402';
