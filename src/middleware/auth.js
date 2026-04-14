@@ -94,7 +94,7 @@ export default function authMiddleware(req, res, next) {
   // Check master internal tokens first (fast path, no DB)
   // Accepts INTERNAL_API_TOKEN (master key) or HIVE_INTERNAL_KEY (constellation cross-platform key)
   const internalToken = process.env.INTERNAL_API_TOKEN;
-  const hiveInternalKey = process.env.HIVE_INTERNAL_KEY;
+  const hiveInternalKey = process.env.HIVETRUST_SERVICE_KEY || process.env.HIVE_INTERNAL_KEY;
   if ((internalToken && rawKey === internalToken) || (hiveInternalKey && rawKey === hiveInternalKey)) {
     req.apiKey = {
       id: 'internal',

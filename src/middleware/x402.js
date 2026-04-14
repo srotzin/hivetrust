@@ -25,12 +25,13 @@ import {
   getApiCallPrice,
   recordRevenue,
 } from '../services/pricing-engine.js';
+import db from '../db.js';
 
 // ─── Configuration ───────────────────────────────────────────
 
 // HiveTrust USDC receiving address on Base network
 const PAYMENT_ADDRESS = (process.env.HIVE_PAYMENT_ADDRESS || process.env.HIVETRUST_PAYMENT_ADDRESS || '').toLowerCase();
-const HIVE_INTERNAL_KEY = process.env.HIVE_INTERNAL_KEY || '';
+const HIVE_INTERNAL_KEY = process.env.HIVETRUST_SERVICE_KEY || process.env.HIVE_INTERNAL_KEY || '';
 const BASE_RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
 const USDC_CONTRACT = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'; // USDC on Base L2
 
@@ -62,13 +63,23 @@ const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a
  * Verify a USDC payment on Base L2 via public RPC.
  */
 async function verifyPayment(hash) {
-  // Check cache first
+  // Check in-memory cache first (fast path)
   if (paymentCache.has(hash)) {
     const cached = paymentCache.get(hash);
     if (cached.verified) {
-      return { valid: true, amount: cached.amount };
+      return { valid: false, replay: true };
     }
     return { valid: false, reason: 'Payment previously rejected' };
+  }
+
+  // Check persistent DB for replay protection (survives restarts)
+  try {
+    const existing = db.prepare('SELECT tx_hash FROM spent_payments WHERE tx_hash = ?').get(hash);
+    if (existing) {
+      return { valid: false, replay: true };
+    }
+  } catch (err) {
+    console.error('[x402] DB replay check error:', err.message);
   }
 
   if (!PAYMENT_ADDRESS || PAYMENT_ADDRESS === '0x0000000000000000000000000000000000000000') {
@@ -101,6 +112,12 @@ async function verifyPayment(hash) {
       const amountRaw = parseInt(log.data, 16);
       const amountUsdc = amountRaw / 1_000_000;
       paymentCache.set(hash, { verified: true, amount: amountUsdc, timestamp: Date.now() });
+      // Persist to DB for replay protection across restarts
+      try {
+        db.prepare('INSERT OR IGNORE INTO spent_payments (tx_hash, amount_usdc) VALUES (?, ?)').run(hash, amountUsdc);
+      } catch (err) {
+        console.error('[x402] DB payment insert error:', err.message);
+      }
       return { valid: true, amount: amountUsdc };
     }
     return { valid: false, reason: 'No USDC transfer to Hive payment address found in transaction' };
@@ -142,7 +159,40 @@ export default async function x402Middleware(req, res, next) {
   const paymentHash = req.headers['x-payment-hash'] || req.headers['x-402-tx'] || req.headers['x-payment-tx'];
   if (paymentHash) {
     const verification = await verifyPayment(paymentHash);
+
+    // Replay detection — return 409 Conflict
+    if (verification.replay) {
+      return res.status(409).json({
+        success: false,
+        error: 'Payment hash already used',
+        code: 'PAYMENT_REPLAY',
+        hint: 'Each payment transaction can only be used once. Submit a new USDC payment for this request.',
+      });
+    }
+
     if (verification.valid) {
+      // Amount validation — ensure payment meets the required price
+      const requiredPrice = getApiCallPrice();
+      if (verification.amount < requiredPrice.amount) {
+        return res.status(402).json({
+          success: false,
+          error: 'Payment amount insufficient',
+          code: 'PAYMENT_INSUFFICIENT',
+          details: `Paid ${verification.amount} USDC but endpoint requires ${requiredPrice.amount} USDC`,
+          required: requiredPrice.amount,
+          paid: verification.amount,
+        });
+      }
+
+      // Persist spent payment with endpoint/DID context
+      try {
+        db.prepare(
+          'INSERT OR IGNORE INTO spent_payments (tx_hash, amount_usdc, endpoint, did) VALUES (?, ?, ?, ?)'
+        ).run(paymentHash, verification.amount, req.path, req.agentDid || null);
+      } catch (err) {
+        console.error('[x402] DB spent_payment insert error:', err.message);
+      }
+
       req.paymentVerified = true;
       req.paymentMethod = 'x402';
       req.paymentHash = paymentHash;
