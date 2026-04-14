@@ -396,7 +396,7 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
 
 // ─── A2A Agent Card (public) ─────────────────────────────────
 
-app.get('/.well-known/agent.json', (req, res) => {
+function agentCardHandler(req, res) {
   const host = process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com';
 
   return res.json({
@@ -448,7 +448,10 @@ app.get('/.well-known/agent.json', (req, res) => {
       url: 'https://www.hiveagentiq.com',
     },
   });
-});
+}
+
+app.get('/.well-known/agent.json', agentCardHandler);
+app.get('/.well-known/agent-card.json', agentCardHandler);
 
 // ─── Hive Payments Discovery (public) ────────────────────────
 
