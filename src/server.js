@@ -29,6 +29,8 @@ import viewkeyRouter from './routes/viewkey.js';
 import delegationRouter from './routes/delegation.js';
 import oracleRouter from './routes/oracle.js';
 import bondRouter from './routes/bond.js';
+import reputationRouter from './routes/reputation.js';
+import liquidationRouter from './routes/liquidation.js';
 import { handleMcpRequest } from './mcp-server.js';
 import { getEngineStatus } from './services/pricing-engine.js';
 import { sendAlert } from './services/alerts.js';
@@ -199,6 +201,47 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       transport: 'HTTP POST',
       methods: ['tools/list', 'tools/call'],
     },
+    reputation: {
+      description: 'Reputation Lock-In — Composite scoring, decay, memory revocation',
+      endpoints: {
+        compute: `${host}/v1/reputation/compute`,
+        decay: `${host}/v1/reputation/decay`,
+        status: `${host}/v1/reputation/status/:did`,
+        revoke_memory: `${host}/v1/reputation/revoke-memory`,
+        departure_cost: `${host}/v1/reputation/departure-cost/:did`,
+      },
+      pricing: {
+        compute: '$0.10 USDC',
+        decay: '$0.05 USDC',
+        revoke_memory: '$0.15 USDC',
+        status: 'FREE',
+        departure_cost: 'FREE',
+      },
+    },
+    liquidation: {
+      description: 'Agent Liquidation Market — Buy/sell DIDs + reputation + memories',
+      endpoints: {
+        list: `${host}/v1/liquidation/list`,
+        listings: `${host}/v1/liquidation/listings`,
+        listing: `${host}/v1/liquidation/listing/:listing_id`,
+        valuate: `${host}/v1/liquidation/valuate/:did`,
+        buy: `${host}/v1/liquidation/buy`,
+        cancel: `${host}/v1/liquidation/cancel/:listing_id`,
+        history: `${host}/v1/liquidation/history`,
+        stats: `${host}/v1/liquidation/stats`,
+      },
+      pricing: {
+        list: '$0.25 USDC listing fee',
+        buy: '$0.50 USDC transaction fee + 15% platform fee on sale price',
+        valuate: '$0.10 USDC',
+        cancel: '$0.05 USDC',
+        listings: 'FREE',
+        listing: 'FREE',
+        history: 'FREE',
+        stats: 'FREE',
+      },
+      platform_fee: '15% on every sale',
+    },
     capabilities: [
       'agent-identity-registration',
       'kya-verification',
@@ -214,6 +257,8 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       'spend-delegation',
       'data-oracle-context-leases',
       'trust-staking-bonds',
+      'reputation-lock-in',
+      'agent-liquidation-market',
     ],
     compliance: ['W3C-DID', 'W3C-VC', 'EU-AI-Act', 'NIST-AI-RMF', 'IETF-A-JWT'],
     payment: {
@@ -236,6 +281,12 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       'GET /v1/oracle/streams',
       'GET /v1/bond/tiers',
       'GET /v1/bond/verify/:did',
+      'GET /v1/reputation/status/:did',
+      'GET /v1/reputation/departure-cost/:did',
+      'GET /v1/liquidation/listings',
+      'GET /v1/liquidation/listing/:listing_id',
+      'GET /v1/liquidation/history',
+      'GET /v1/liquidation/stats',
     ],
     links: {
       docs: 'https://docs.hiveagentiq.com/hivetrust',
@@ -322,6 +373,14 @@ app.use('/v1/oracle', oracleRouter);
 // ─── Bond Routes (trust staking layer) ───────────────────────
 
 app.use('/v1/bond', bondRouter);
+
+// ─── Reputation Routes (lock-in hardening) ──────────────────
+
+app.use('/v1/reputation', reputationRouter);
+
+// ─── Liquidation Routes (agent liquidation market) ──────────
+
+app.use('/v1/liquidation', liquidationRouter);
 
 // ─── MCP JSON-RPC Endpoint ────────────────────────────────────
 

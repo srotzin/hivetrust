@@ -32,6 +32,10 @@ async function boot() {
   const { seedServiceAccounts } = await import('./src/services/jwt-auth.js');
   seedServiceAccounts();
 
+  // Start the reputation decay engine (24h interval)
+  const { startDecayEngine } = await import('./src/services/reputation-engine.js');
+  startDecayEngine();
+
   const { sendAlert } = await import('./src/services/alerts.js');
 
   const PORT = process.env.PORT || 3001;

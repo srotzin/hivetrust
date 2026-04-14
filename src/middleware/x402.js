@@ -148,6 +148,59 @@ function getBondPrice(path) {
   return null;
 }
 
+// Reputation — endpoint-specific pricing (USDC)
+const REPUTATION_PRICING = {
+  '/reputation/compute':       0.10,
+  '/reputation/decay':         0.05,
+  '/reputation/revoke-memory': 0.15,
+};
+
+const REPUTATION_FREE_PATHS = new Set([]);
+
+/**
+ * Get the required price for Reputation endpoints.
+ * Returns null if the path is not a reputation endpoint.
+ */
+function getReputationPrice(path) {
+  if (REPUTATION_PRICING[path] !== undefined) {
+    return { amount: REPUTATION_PRICING[path], model: 'reputation_fixed' };
+  }
+  // /reputation/status/:did and /reputation/departure-cost/:did are free lookups
+  if (path.startsWith('/reputation/status/') || path.startsWith('/reputation/departure-cost/')) {
+    return { amount: 0, model: 'reputation_free' };
+  }
+  return null;
+}
+
+// Liquidation — endpoint-specific pricing (USDC)
+const LIQUIDATION_PRICING = {
+  '/liquidation/list': 0.25,
+  '/liquidation/buy':  0.50,
+};
+
+/**
+ * Get the required price for Liquidation endpoints.
+ * Returns null if the path is not a liquidation endpoint.
+ */
+function getLiquidationPrice(path) {
+  if (LIQUIDATION_PRICING[path] !== undefined) {
+    return { amount: LIQUIDATION_PRICING[path], model: 'liquidation_fixed' };
+  }
+  // Valuate and cancel have fixed prices based on prefix
+  if (path.startsWith('/liquidation/valuate/')) {
+    return { amount: 0.10, model: 'liquidation_fixed' };
+  }
+  if (path.startsWith('/liquidation/cancel/')) {
+    return { amount: 0.05, model: 'liquidation_fixed' };
+  }
+  // Browse, detail, history, stats are free
+  if (path === '/liquidation/listings' || path.startsWith('/liquidation/listing/') ||
+      path === '/liquidation/history' || path === '/liquidation/stats') {
+    return { amount: 0, model: 'liquidation_free' };
+  }
+  return null;
+}
+
 /**
  * Get the required price for Oracle endpoints.
  * create-lease and renew-lease use dynamic pricing based on data_stream + duration.
@@ -312,7 +365,9 @@ export default async function x402Middleware(req, res, next) {
       const delegationPrice = getDelegationPrice(req.path);
       const oraclePrice = getOraclePrice(req.path, req.body);
       const bondPrice = getBondPrice(req.path);
-      const requiredPrice = viewkeyPrice || delegationPrice || oraclePrice || bondPrice || getApiCallPrice();
+      const reputationPrice = getReputationPrice(req.path);
+      const liquidationPrice = getLiquidationPrice(req.path);
+      const requiredPrice = viewkeyPrice || delegationPrice || oraclePrice || bondPrice || reputationPrice || liquidationPrice || getApiCallPrice();
       if (verification.amount < requiredPrice.amount) {
         return res.status(402).json({
           success: false,
@@ -349,7 +404,9 @@ export default async function x402Middleware(req, res, next) {
   const delegationFallback = getDelegationPrice(req.path);
   const oracleFallback = getOraclePrice(req.path, req.body);
   const bondFallback = getBondPrice(req.path);
-  const fixedPrice = viewkeyFallback || delegationFallback || oracleFallback || bondFallback;
+  const reputationFallback = getReputationPrice(req.path);
+  const liquidationFallback = getLiquidationPrice(req.path);
+  const fixedPrice = viewkeyFallback || delegationFallback || oracleFallback || bondFallback || reputationFallback || liquidationFallback;
   const price = fixedPrice
     ? { ...getApiCallPrice(), amount: fixedPrice.amount, model: fixedPrice.model }
     : getApiCallPrice();
@@ -429,6 +486,11 @@ function isFreePath(path) {
   // Bond free endpoints (tiers, leaderboard, pool, slash, verify, agent lookup)
   if (BOND_FREE_PATHS.has(path)) return true;
   if (path.startsWith('/bond/agent/') || path.startsWith('/bond/verify/')) return true;
+  // Reputation free endpoints (status, departure-cost lookups)
+  if (path.startsWith('/reputation/status/') || path.startsWith('/reputation/departure-cost/')) return true;
+  // Liquidation free endpoints (browse, detail, history, stats)
+  if (path === '/liquidation/listings' || path.startsWith('/liquidation/listing/') ||
+      path === '/liquidation/history' || path === '/liquidation/stats') return true;
   return false;
 }
 
