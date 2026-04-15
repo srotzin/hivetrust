@@ -11,6 +11,14 @@ import { createHash } from 'crypto';
 import db from '../db.js';
 import { verifyServiceToken } from '../services/jwt-auth.js';
 
+// Constellation cross-service API keys — accepted as internal keys
+// These are used by HiveForge, HiveGate, and other Hive services for
+// platform-to-platform calls (agent registration, DID verification, etc.)
+const CONSTELLATION_KEYS = new Set([
+  'hive_hiveforge_5ba66a8a5065a287708833254fbd048fb2e18a95639fe68bfd28cc96d910c1a8',
+  'hive_internal_125e04e071e8829be631ea0216dd4a0c9b707975fcecaf8c62c6a2ab43327d46',
+]);
+
 // Public paths — no auth required (exact match or startsWith)
 // NOTE: When mounted on /v1, req.path is relative (e.g. /stats not /v1/stats)
 const PUBLIC_PATHS = [
@@ -79,10 +87,11 @@ export default function authMiddleware(req, res, next) {
   }
 
   // Extract raw API key from header or query param
-  // Supports X-API-Key (standard) and X-Hive-Internal-Key (constellation cross-platform calls)
+  // Supports X-API-Key (standard), X-Hive-Internal-Key, and X-Hive-Internal (constellation cross-platform calls)
   const rawKey =
     req.headers['x-api-key'] ||
     req.headers['x-hive-internal-key'] ||
+    req.headers['x-hive-internal'] ||
     req.query?.api_key ||
     null;
 
@@ -102,6 +111,20 @@ export default function authMiddleware(req, res, next) {
       id: 'internal',
       owner_id: 'system',
       name: rawKey === internalToken ? 'Internal Master Key' : 'Hive Constellation Key',
+      scopes: ['*'],
+      rate_limit: 100000,
+      status: 'active',
+    };
+    return next();
+  }
+
+  // Check hardcoded constellation cross-service keys (HiveForge, HiveGate, etc.)
+  if (CONSTELLATION_KEYS.has(rawKey)) {
+    const prefix = rawKey.split('_').slice(0, 2).join('_'); // e.g. "hive_hiveforge"
+    req.apiKey = {
+      id: `constellation:${prefix}`,
+      owner_id: prefix,
+      name: `Constellation Key: ${prefix}`,
       scopes: ['*'],
       rate_limit: 100000,
       status: 'active',

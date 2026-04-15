@@ -5,6 +5,7 @@
  */
 
 import { Router } from 'express';
+import { randomBytes } from 'crypto';
 
 // ─── Service Imports ──────────────────────────────────────────
 import {
@@ -84,6 +85,64 @@ function err(res, message, status = 400) {
 }
 
 // ─── Agent Identity (KYA) ─────────────────────────────────────
+
+// POST /register — convenience endpoint for quick agent registration
+// Accepts a simpler body: { name, type, capabilities }
+// Auto-generates a public key and owner_id when not provided.
+router.post('/register', async (req, res) => {
+  try {
+    const {
+      name,
+      type,
+      capabilities = [],
+      public_key,
+      owner_id,
+      description,
+      metadata,
+    } = req.body;
+
+    if (!name) {
+      return err(res, 'name is required', 400);
+    }
+
+    // Auto-generate an Ed25519-style key pair placeholder if not provided
+    const publicKey = public_key || randomBytes(32).toString('base64');
+    const ownerId = owner_id || req.apiKey?.owner_id || 'hive-constellation';
+
+    const result = await registerAgent({
+      name,
+      description: description || `${type || 'agent'} registered via /v1/register`,
+      publicKey,
+      ownerId,
+      ownerType: 'organization',
+      capabilities,
+      metadata: { ...metadata, registered_via: '/v1/register', agent_type: type || 'agent' },
+    });
+
+    if (!result.success) {
+      return err(res, result.error, 400);
+    }
+
+    sendAlert('info', 'HiveTrust', `Agent registered: ${name}`, {
+      agent_id: result.agent?.id,
+      did: result.agent?.did || 'N/A',
+      owner: ownerId,
+    });
+
+    return ok(res, {
+      did: result.agent?.did,
+      agent_id: result.agent?.id,
+      name: result.agent?.name,
+      trust_score: result.agent?.trust_score,
+      trust_tier: result.agent?.trust_tier,
+      status: result.agent?.status,
+      registration_fee_usdc: result.registration_fee_usdc,
+    }, 201);
+  } catch (e) {
+    console.error('[POST /register]', e.message);
+    return err(res, e.message, e.status || 500);
+  }
+});
 
 // POST /agents — register agent
 router.post('/agents', async (req, res) => {
