@@ -7,7 +7,7 @@
  * Policy types: 'transaction' | 'performance' | 'liability'
  */
 
-import db from '../db.js';
+import { query } from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import * as audit from './audit.js';
 import { getTrustScore } from './trust-scoring.js';
@@ -30,8 +30,9 @@ const QUOTE_TTL_MS = 30 * 60 * 1000;
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-function getTierForAgent(agentId) {
-  const agent = db.prepare('SELECT trust_tier, trust_score FROM agents WHERE id = ?').get(agentId);
+async function getTierForAgent(agentId) {
+  const result = await query('SELECT trust_tier, trust_score FROM agents WHERE id = $1', [agentId]);
+  const agent = result.rows[0];
   return {
     tier:  agent?.trust_tier  ?? 'unverified',
     score: agent?.trust_score ?? 0,
@@ -67,7 +68,7 @@ const _quoteCache = new Map();
  * @param {string} [policyType]     - 'transaction' | 'performance' | 'liability'
  * @returns {{ success: boolean, quote?: object, error?: string }}
  */
-export function getQuote(agentId, counterpartyId, transactionValue, policyType = 'transaction') {
+export async function getQuote(agentId, counterpartyId, transactionValue, policyType = 'transaction') {
   try {
     if (!agentId)          return { success: false, error: 'agentId is required' };
     if (!counterpartyId)   return { success: false, error: 'counterpartyId is required' };
@@ -78,8 +79,8 @@ export function getQuote(agentId, counterpartyId, transactionValue, policyType =
       return { success: false, error: `Invalid policy type. Allowed: ${[...validTypes].join(', ')}` };
     }
 
-    const primary      = getTierForAgent(agentId);
-    const counterparty = getTierForAgent(counterpartyId);
+    const primary      = await getTierForAgent(agentId);
+    const counterparty = await getTierForAgent(counterpartyId);
 
     const premiumRate   = blendedPremiumRate(primary.tier, counterparty.tier);
     const premiumUsdc   = Math.round(transactionValue * premiumRate * 100) / 100;
@@ -111,7 +112,7 @@ export function getQuote(agentId, counterpartyId, transactionValue, policyType =
 
     _quoteCache.set(quoteId, quote);
 
-    audit.log(agentId, 'agent', 'insurance.quote', 'insurance_quote', quoteId,
+    await audit.log(agentId, 'agent', 'insurance.quote', 'insurance_quote', quoteId,
       { counterpartyId, transactionValue, premiumUsdc: finalPremium, policyType });
 
     return { success: true, quote };
@@ -132,7 +133,7 @@ export function getQuote(agentId, counterpartyId, transactionValue, policyType =
  * @param {string} [ipAddress]
  * @returns {{ success: boolean, policy?: object, error?: string }}
  */
-export function bindPolicy(agentId, quoteId, transactionValue, ipAddress = null) {
+export async function bindPolicy(agentId, quoteId, transactionValue, ipAddress = null) {
   try {
     const quote = _quoteCache.get(quoteId);
     if (!quote) return { success: false, error: 'Quote not found or expired' };
@@ -145,7 +146,8 @@ export function bindPolicy(agentId, quoteId, transactionValue, ipAddress = null)
       return { success: false, error: 'Transaction value does not match quote' };
     }
 
-    const agent = db.prepare('SELECT id, status FROM agents WHERE id = ?').get(agentId);
+    const agentResult = await query('SELECT id, status FROM agents WHERE id = $1', [agentId]);
+    const agent = agentResult.rows[0];
     if (!agent) return { success: false, error: 'Agent not found' };
     if (agent.status !== 'active') return { success: false, error: 'Agent is not active' };
 
@@ -160,7 +162,10 @@ export function bindPolicy(agentId, quoteId, transactionValue, ipAddress = null)
       liability:   ['data_breach', 'third_party_harm', 'regulatory_fine'],
     }[quote.policyType] ?? ['general_loss'];
 
-    db.prepare(`
+    const scoreResult = await query('SELECT trust_score FROM agents WHERE id = $1', [agentId]);
+    const underwritingScore = scoreResult.rows[0]?.trust_score ?? 50;
+
+    await query(`
       INSERT INTO insurance_policies (
         id, agent_id, policy_type,
         coverage_amount_usdc, premium_usdc, deductible_usdc,
@@ -168,24 +173,24 @@ export function bindPolicy(agentId, quoteId, transactionValue, ipAddress = null)
         max_claims, claims_used,
         status, started_at, expires_at,
         underwriting_score, risk_tier
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 3, 0, 'active', ?, ?, ?, ?)
-    `).run(
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 3, 0, 'active', $9, $10, $11, $12)
+    `, [
       id, agentId, quote.policyType,
       quote.coverageAmount, quote.premiumUsdc, quote.deductibleUsdc,
       JSON.stringify(coveredActions),
       JSON.stringify(['intentional_fraud', 'pre_existing_disputes']),
       startedAt, expiresAt,
-      db.prepare('SELECT trust_score FROM agents WHERE id = ?').get(agentId)?.trust_score ?? 50,
+      underwritingScore,
       quote.primaryTier
-    );
+    ]);
 
     _quoteCache.delete(quoteId); // consume quote
 
-    audit.log(agentId, 'agent', 'insurance.bind', 'insurance_policy', id,
+    await audit.log(agentId, 'agent', 'insurance.bind', 'insurance_policy', id,
       { quoteId, premiumUsdc: quote.premiumUsdc, policyType: quote.policyType }, ipAddress);
 
-    const row = db.prepare('SELECT * FROM insurance_policies WHERE id = ?').get(id);
-    return { success: true, policy: deserializePolicy(row) };
+    const rowResult = await query('SELECT * FROM insurance_policies WHERE id = $1', [id]);
+    return { success: true, policy: deserializePolicy(rowResult.rows[0]) };
   } catch (err) {
     console.error('[insurance] bindPolicy failed:', err.message);
     return { success: false, error: err.message };
@@ -206,11 +211,12 @@ export function bindPolicy(agentId, quoteId, transactionValue, ipAddress = null)
  * @param {string} [ipAddress]
  * @returns {{ success: boolean, claim?: object, error?: string }}
  */
-export function fileClaim(policyId, claimantId, claimType, amount, description, evidence = {}, ipAddress = null) {
+export async function fileClaim(policyId, claimantId, claimType, amount, description, evidence = {}, ipAddress = null) {
   try {
     if (!(amount > 0)) return { success: false, error: 'Claim amount must be positive' };
 
-    const policy = db.prepare('SELECT * FROM insurance_policies WHERE id = ?').get(policyId);
+    const policyResult = await query('SELECT * FROM insurance_policies WHERE id = $1', [policyId]);
+    const policy = policyResult.rows[0];
     if (!policy) return { success: false, error: 'Policy not found' };
     if (policy.status !== 'active') return { success: false, error: `Policy is ${policy.status}` };
 
@@ -230,25 +236,25 @@ export function fileClaim(policyId, claimantId, claimType, amount, description, 
 
     const id = uuidv4();
 
-    db.prepare(`
+    await query(`
       INSERT INTO insurance_claims (
         id, policy_id, agent_id, claimant_id,
         claim_type, amount_usdc, description, evidence,
         status, filed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'filed', datetime('now'))
-    `).run(
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'filed', NOW()::TEXT)
+    `, [
       id, policyId, policy.agent_id, claimantId,
       claimType, netAmount, description, JSON.stringify(evidence)
-    );
+    ]);
 
     // Increment claims counter
-    db.prepare(`UPDATE insurance_policies SET claims_used = claims_used + 1 WHERE id = ?`).run(policyId);
+    await query('UPDATE insurance_policies SET claims_used = claims_used + 1 WHERE id = $1', [policyId]);
 
-    audit.log(claimantId, 'agent', 'insurance.claim.file', 'insurance_claim', id,
+    await audit.log(claimantId, 'agent', 'insurance.claim.file', 'insurance_claim', id,
       { policyId, claimType, amount: netAmount }, ipAddress);
 
-    const row = db.prepare('SELECT * FROM insurance_claims WHERE id = ?').get(id);
-    return { success: true, claim: deserializeClaim(row) };
+    const rowResult = await query('SELECT * FROM insurance_claims WHERE id = $1', [id]);
+    return { success: true, claim: deserializeClaim(rowResult.rows[0]) };
   } catch (err) {
     console.error('[insurance] fileClaim failed:', err.message);
     return { success: false, error: err.message };
@@ -267,34 +273,35 @@ export function fileClaim(policyId, claimantId, claimType, amount, description, 
  * @param {string} [ipAddress]
  * @returns {{ success: boolean, claim?: object, error?: string }}
  */
-export function resolveClaim(claimId, resolution, payoutUsdc = 0, resolvedBy = 'system', ipAddress = null) {
+export async function resolveClaim(claimId, resolution, payoutUsdc = 0, resolvedBy = 'system', ipAddress = null) {
   try {
     const allowed = new Set(['approved', 'denied', 'partial']);
     if (!allowed.has(resolution)) {
       return { success: false, error: `Invalid resolution. Allowed: ${[...allowed].join(', ')}` };
     }
 
-    const claim = db.prepare('SELECT * FROM insurance_claims WHERE id = ?').get(claimId);
+    const claimResult = await query('SELECT * FROM insurance_claims WHERE id = $1', [claimId]);
+    const claim = claimResult.rows[0];
     if (!claim) return { success: false, error: 'Claim not found' };
     if (claim.status !== 'filed') return { success: false, error: `Claim is already ${claim.status}` };
 
-    db.prepare(`
+    await query(`
       UPDATE insurance_claims
-      SET status = ?, resolution = ?, payout_usdc = ?, resolved_at = datetime('now')
-      WHERE id = ?
-    `).run(resolution, resolution, payoutUsdc, claimId);
+      SET status = $1, resolution = $2, payout_usdc = $3, resolved_at = NOW()::TEXT
+      WHERE id = $4
+    `, [resolution, resolution, payoutUsdc, claimId]);
 
     // If denied, decrement claims_used (give the slot back)
     if (resolution === 'denied') {
-      db.prepare(`UPDATE insurance_policies SET claims_used = MAX(0, claims_used - 1) WHERE id = ?`)
-        .run(claim.policy_id);
+      await query('UPDATE insurance_policies SET claims_used = GREATEST(0, claims_used - 1) WHERE id = $1',
+        [claim.policy_id]);
     }
 
-    audit.log(resolvedBy, 'system', 'insurance.claim.resolve', 'insurance_claim', claimId,
+    await audit.log(resolvedBy, 'system', 'insurance.claim.resolve', 'insurance_claim', claimId,
       { resolution, payoutUsdc }, ipAddress);
 
-    const updated = db.prepare('SELECT * FROM insurance_claims WHERE id = ?').get(claimId);
-    return { success: true, claim: deserializeClaim(updated) };
+    const updatedResult = await query('SELECT * FROM insurance_claims WHERE id = $1', [claimId]);
+    return { success: true, claim: deserializeClaim(updatedResult.rows[0]) };
   } catch (err) {
     console.error('[insurance] resolveClaim failed:', err.message);
     return { success: false, error: err.message };
@@ -309,18 +316,17 @@ export function resolveClaim(claimId, resolution, payoutUsdc = 0, resolvedBy = '
  * @param {string} policyId
  * @returns {{ success: boolean, policy?: object, claims?: object[], error?: string }}
  */
-export function getPolicyDetails(policyId) {
+export async function getPolicyDetails(policyId) {
   try {
-    const row = db.prepare('SELECT * FROM insurance_policies WHERE id = ?').get(policyId);
-    if (!row) return { success: false, error: 'Policy not found' };
+    const rowResult = await query('SELECT * FROM insurance_policies WHERE id = $1', [policyId]);
+    if (!rowResult.rows[0]) return { success: false, error: 'Policy not found' };
 
-    const claims = db.prepare('SELECT * FROM insurance_claims WHERE policy_id = ? ORDER BY filed_at DESC')
-      .all(policyId);
+    const claimsResult = await query('SELECT * FROM insurance_claims WHERE policy_id = $1 ORDER BY filed_at DESC', [policyId]);
 
     return {
       success: true,
-      policy: deserializePolicy(row),
-      claims: claims.map(deserializeClaim),
+      policy: deserializePolicy(rowResult.rows[0]),
+      claims: claimsResult.rows.map(deserializeClaim),
     };
   } catch (err) {
     return { success: false, error: err.message };

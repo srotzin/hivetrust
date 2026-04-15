@@ -6,7 +6,7 @@
 
 import jwt from 'jsonwebtoken';
 import { createHash, randomBytes } from 'crypto';
-import db from '../db.js';
+import { query } from '../db.js';
 
 const JWT_SIGNING_SECRET = process.env.JWT_SIGNING_SECRET || '';
 const TOKEN_EXPIRY = '1h';
@@ -22,19 +22,21 @@ function hashSecret(secret) {
  * Issue a JWT for a service account after validating its secret.
  * @param {string} platform - Platform name (e.g. 'hivemind')
  * @param {string} secret - The platform's secret
- * @returns {{ token: string, expires_at: string, scopes: string[] }}
+ * @returns {Promise<{ token: string, expires_at: string, scopes: string[] }>}
  */
-export function issueServiceToken(platform, secret) {
+export async function issueServiceToken(platform, secret) {
   if (!JWT_SIGNING_SECRET) {
     throw Object.assign(new Error('JWT signing not configured'), { status: 500 });
   }
 
-  const account = db.prepare(
+  const result = await query(
     `SELECT account_id, platform, scopes, status, secret_hash
      FROM service_accounts
-     WHERE platform = ?
-     LIMIT 1`
-  ).get(platform);
+     WHERE platform = $1
+     LIMIT 1`,
+    [platform]
+  );
+  const account = result.rows[0];
 
   if (!account) {
     throw Object.assign(new Error('Unknown platform'), { status: 401 });
@@ -69,10 +71,10 @@ export function issueServiceToken(platform, secret) {
   const decoded = jwt.decode(token);
   const expires_at = new Date(decoded.exp * 1000).toISOString();
 
-  // Update last_used_at
+  // Update last_used_at (fire-and-forget)
   try {
-    db.prepare(`UPDATE service_accounts SET last_used_at = datetime('now') WHERE platform = ?`)
-      .run(platform);
+    query('UPDATE service_accounts SET last_used_at = NOW()::TEXT WHERE platform = $1', [platform])
+      .catch(() => {});
   } catch { /* non-fatal */ }
 
   return { token, expires_at, scopes };
@@ -100,7 +102,7 @@ export function verifyServiceToken(token) {
  * Seed service accounts for all platforms on startup.
  * If a platform's env var secret is not set, generates a random one and logs it.
  */
-export function seedServiceAccounts() {
+export async function seedServiceAccounts() {
   const PLATFORMS = {
     hivemind: {
       display_name: 'HiveMind',
@@ -124,14 +126,10 @@ export function seedServiceAccounts() {
     },
   };
 
-  const insert = db.prepare(`
-    INSERT OR IGNORE INTO service_accounts (account_id, platform, display_name, secret_hash, scopes, status)
-    VALUES (?, ?, ?, ?, ?, 'active')
-  `);
-
   for (const [platform, config] of Object.entries(PLATFORMS)) {
     // Check if already exists
-    const existing = db.prepare('SELECT account_id FROM service_accounts WHERE platform = ?').get(platform);
+    const result = await query('SELECT account_id FROM service_accounts WHERE platform = $1', [platform]);
+    const existing = result.rows[0];
     if (existing) continue;
 
     let secret = process.env[config.secret_env];
@@ -142,12 +140,11 @@ export function seedServiceAccounts() {
     }
 
     const accountId = crypto.randomUUID();
-    insert.run(
-      accountId,
-      platform,
-      config.display_name,
-      hashSecret(secret),
-      JSON.stringify(config.scopes),
+    await query(
+      `INSERT INTO service_accounts (account_id, platform, display_name, secret_hash, scopes, status)
+       VALUES ($1, $2, $3, $4, $5, 'active')
+       ON CONFLICT DO NOTHING`,
+      [accountId, platform, config.display_name, hashSecret(secret), JSON.stringify(config.scopes)]
     );
     console.log(`[HiveTrust] Seeded service account: ${platform} (${accountId})`);
   }

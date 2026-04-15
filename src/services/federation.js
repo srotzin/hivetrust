@@ -9,7 +9,7 @@
  *  - Federated scores are stored locally and averaged into getFederatedScore()
  */
 
-import db from '../db.js';
+import { query, getClient } from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import * as audit from './audit.js';
 
@@ -25,9 +25,9 @@ const HOST = process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com';
  * @param {string} [publicKey]    - Ed25519 public key for verifying signed responses
  * @param {string} [registeredBy]
  * @param {string} [ipAddress]
- * @returns {{ success: boolean, peer?: object, error?: string }}
+ * @returns {Promise<{ success: boolean, peer?: object, error?: string }>}
  */
-export function registerPeer(platformName, platformUrl, publicKey = null, registeredBy = 'system', ipAddress = null) {
+export async function registerPeer(platformName, platformUrl, publicKey = null, registeredBy = 'system', ipAddress = null) {
   try {
     if (!platformName) return { success: false, error: 'platformName is required' };
     if (!platformUrl)  return { success: false, error: 'platformUrl is required' };
@@ -37,22 +37,25 @@ export function registerPeer(platformName, platformUrl, publicKey = null, regist
     }
 
     // Guard duplicates
-    const existing = db.prepare('SELECT id FROM federation_peers WHERE platform_url = ?').get(platformUrl);
+    const existingResult = await query('SELECT id FROM federation_peers WHERE platform_url = $1', [platformUrl]);
+    const existing = existingResult.rows[0];
     if (existing) {
       return { success: false, error: 'A peer with this URL is already registered', peerId: existing.id };
     }
 
     const id = uuidv4();
 
-    db.prepare(`
-      INSERT INTO federation_peers (id, platform_name, platform_url, public_key, trust_level, status, created_at)
-      VALUES (?, ?, ?, ?, 'provisional', 'active', datetime('now'))
-    `).run(id, platformName, platformUrl, publicKey || null);
+    await query(
+      `INSERT INTO federation_peers (id, platform_name, platform_url, public_key, trust_level, status, created_at)
+       VALUES ($1, $2, $3, $4, 'provisional', 'active', NOW()::TEXT)`,
+      [id, platformName, platformUrl, publicKey || null]
+    );
 
-    audit.log(registeredBy, 'system', 'federation.register_peer', 'federation_peer', id,
+    await audit.log(registeredBy, 'system', 'federation.register_peer', 'federation_peer', id,
       { platformName, platformUrl }, ipAddress);
 
-    const row = db.prepare('SELECT * FROM federation_peers WHERE id = ?').get(id);
+    const rowResult = await query('SELECT * FROM federation_peers WHERE id = $1', [id]);
+    const row = rowResult.rows[0];
     return { success: true, peer: deserializePeer(row) };
   } catch (err) {
     console.error('[federation] registerPeer failed:', err.message);
@@ -65,12 +68,12 @@ export function registerPeer(platformName, platformUrl, publicKey = null, regist
 /**
  * List all active federation peers.
  *
- * @returns {{ success: boolean, peers?: object[], error?: string }}
+ * @returns {Promise<{ success: boolean, peers?: object[], error?: string }>}
  */
-export function listPeers() {
+export async function listPeers() {
   try {
-    const rows = db.prepare(`SELECT * FROM federation_peers WHERE status = 'active' ORDER BY created_at DESC`).all();
-    return { success: true, peers: rows.map(deserializePeer) };
+    const result = await query(`SELECT * FROM federation_peers WHERE status = 'active' ORDER BY created_at DESC`);
+    return { success: true, peers: result.rows.map(deserializePeer) };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -84,11 +87,12 @@ export function listPeers() {
  *
  * @param {string} peerId        - federation_peers.id
  * @param {string} [requestedBy]
- * @returns {{ success: boolean, synced?: number, peer?: object, error?: string }}
+ * @returns {Promise<{ success: boolean, synced?: number, peer?: object, error?: string }>}
  */
 export async function syncScores(peerId, requestedBy = 'system') {
   try {
-    const peer = db.prepare('SELECT * FROM federation_peers WHERE id = ?').get(peerId);
+    const peerResult = await query('SELECT * FROM federation_peers WHERE id = $1', [peerId]);
+    const peer = peerResult.rows[0];
     if (!peer) return { success: false, error: 'Federation peer not found' };
     if (peer.status !== 'active') return { success: false, error: `Peer is ${peer.status}` };
 
@@ -110,7 +114,8 @@ export async function syncScores(peerId, requestedBy = 'system') {
       || `${peer.platform_url}/v1/federation/scores`;
 
     // Get local agents to look up
-    const localAgents = db.prepare('SELECT id FROM agents WHERE status = ?').all('active');
+    const localAgentsResult = await query('SELECT id FROM agents WHERE status = $1', ['active']);
+    const localAgents = localAgentsResult.rows;
     if (localAgents.length === 0) {
       return { success: true, synced: 0, message: 'No local agents to sync' };
     }
@@ -132,32 +137,40 @@ export async function syncScores(peerId, requestedBy = 'system') {
       return { success: false, error: `Score fetch failed: ${fetchErr.message}` };
     }
 
-    // Persist remote scores
-    const upsert = db.prepare(`
-      INSERT INTO federation_scores (id, agent_id, peer_id, remote_agent_id, remote_score, remote_tier, weight, fetched_at)
-      VALUES (?, ?, ?, ?, ?, ?, 1.0, datetime('now'))
-      ON CONFLICT(rowid) DO UPDATE SET remote_score = excluded.remote_score, remote_tier = excluded.remote_tier, fetched_at = excluded.fetched_at
-    `);
-
+    // Persist remote scores using a transaction
     const scores = Array.isArray(remoteScores?.scores) ? remoteScores.scores : [];
-    const insertMany = db.transaction((entries) => {
-      for (const entry of entries) {
+
+    const client = await getClient();
+    try {
+      await client.query('BEGIN');
+      for (const entry of scores) {
         if (!entry.agent_id || entry.score == null) continue;
-        upsert.run(uuidv4(), entry.agent_id, peerId, entry.remote_agent_id || entry.agent_id, entry.score, entry.tier || 'unknown');
+        await client.query(
+          `INSERT INTO federation_scores (id, agent_id, peer_id, remote_agent_id, remote_score, remote_tier, weight, fetched_at)
+           VALUES ($1, $2, $3, $4, $5, $6, 1.0, NOW()::TEXT)
+           ON CONFLICT (agent_id, peer_id) DO UPDATE SET remote_score = EXCLUDED.remote_score, remote_tier = EXCLUDED.remote_tier, fetched_at = EXCLUDED.fetched_at`,
+          [uuidv4(), entry.agent_id, peerId, entry.remote_agent_id || entry.agent_id, entry.score, entry.tier || 'unknown']
+        );
       }
-    });
-    insertMany(scores);
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
 
     // Update peer's shared_agents count
-    db.prepare(`UPDATE federation_peers SET shared_agents = ? WHERE id = ?`).run(scores.length, peerId);
+    await query('UPDATE federation_peers SET shared_agents = $1 WHERE id = $2', [scores.length, peerId]);
 
-    audit.log(requestedBy, 'system', 'federation.sync', 'federation_peer', peerId,
+    await audit.log(requestedBy, 'system', 'federation.sync', 'federation_peer', peerId,
       { synced: scores.length });
 
+    const updatedPeerResult = await query('SELECT * FROM federation_peers WHERE id = $1', [peerId]);
     return {
       success: true,
       synced: scores.length,
-      peer: deserializePeer(db.prepare('SELECT * FROM federation_peers WHERE id = ?').get(peerId)),
+      peer: deserializePeer(updatedPeerResult.rows[0]),
     };
   } catch (err) {
     console.error('[federation] syncScores failed:', err.message);
@@ -172,20 +185,23 @@ export async function syncScores(peerId, requestedBy = 'system') {
  * Weights: local score 0.7, average of federated peer scores 0.3.
  *
  * @param {string} agentId
- * @returns {{ success: boolean, aggregated?: object, error?: string }}
+ * @returns {Promise<{ success: boolean, aggregated?: object, error?: string }>}
  */
-export function getFederatedScore(agentId) {
+export async function getFederatedScore(agentId) {
   try {
-    const agent = db.prepare('SELECT id, trust_score, trust_tier FROM agents WHERE id = ?').get(agentId);
+    const agentResult = await query('SELECT id, trust_score, trust_tier FROM agents WHERE id = $1', [agentId]);
+    const agent = agentResult.rows[0];
     if (!agent) return { success: false, error: 'Agent not found' };
 
-    const federatedRows = db.prepare(`
-      SELECT fs.*, fp.platform_name, fp.trust_level
-      FROM federation_scores fs
-      JOIN federation_peers fp ON fs.peer_id = fp.id
-      WHERE fs.agent_id = ? AND fp.status = 'active'
-      ORDER BY fs.fetched_at DESC
-    `).all(agentId);
+    const federatedResult = await query(
+      `SELECT fs.*, fp.platform_name, fp.trust_level
+       FROM federation_scores fs
+       JOIN federation_peers fp ON fs.peer_id = fp.id
+       WHERE fs.agent_id = $1 AND fp.status = 'active'
+       ORDER BY fs.fetched_at DESC`,
+      [agentId]
+    );
+    const federatedRows = federatedResult.rows;
 
     if (federatedRows.length === 0) {
       return {

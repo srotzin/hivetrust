@@ -30,9 +30,9 @@ function err(res, message, status = 400) {
 // ─── POST /verify-compliance ────────────────────────────────
 // Validate a single Simpson Strong-Tie connector against code requirements.
 
-router.post('/verify-compliance', (req, res) => {
+router.post('/verify-compliance', async (req, res) => {
   try {
-    const result = verifyProductCompliance(req.body);
+    const result = await verifyProductCompliance(req.body);
     return ok(res, result);
   } catch (e) {
     return err(res, e.message, e.status || 500);
@@ -42,9 +42,9 @@ router.post('/verify-compliance', (req, res) => {
 // ─── POST /verify-bom ──────────────────────────────────────
 // Validate an entire Bill of Materials against catalog and code.
 
-router.post('/verify-bom', (req, res) => {
+router.post('/verify-bom', async (req, res) => {
   try {
-    const result = verifyBOM(req.body);
+    const result = await verifyBOM(req.body);
     return ok(res, result);
   } catch (e) {
     return err(res, e.message, e.status || 500);
@@ -54,9 +54,9 @@ router.post('/verify-bom', (req, res) => {
 // ─── GET /audit-trail/:project_id ──────────────────────────
 // Retrieve all compliance proofs issued for a project.
 
-router.get('/audit-trail/:project_id', (req, res) => {
+router.get('/audit-trail/:project_id', async (req, res) => {
   try {
-    const proofs = getAuditTrail(req.params.project_id);
+    const proofs = await getAuditTrail(req.params.project_id);
     return ok(res, { project_id: req.params.project_id, proof_count: proofs.length, proofs });
   } catch (e) {
     return err(res, e.message, e.status || 500);
@@ -66,9 +66,9 @@ router.get('/audit-trail/:project_id', (req, res) => {
 // ─── POST /issue-certificate ───────────────────────────────
 // Issue a signed compliance certificate for a project.
 
-router.post('/issue-certificate', (req, res) => {
+router.post('/issue-certificate', async (req, res) => {
   try {
-    const result = issueCertificate(req.body);
+    const result = await issueCertificate(req.body);
     return ok(res, result, 201);
   } catch (e) {
     return err(res, e.message, e.status || 500);

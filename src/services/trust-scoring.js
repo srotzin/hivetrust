@@ -16,7 +16,7 @@
  *  sovereign    800–1000
  */
 
-import db from '../db.js';
+import { query } from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import * as audit from './audit.js';
 
@@ -63,13 +63,15 @@ function scoreTier(score) {
  * Pillar 1: Transaction Success Rate (0–100)
  * Based on behavioral events for the agent.
  */
-function computeTransactionPillar(agentId) {
-  const events = db.prepare(`
+async function computeTransactionPillar(agentId) {
+  const result = await query(`
     SELECT event_type, COUNT(*) as cnt
     FROM behavioral_events
-    WHERE agent_id = ?
+    WHERE agent_id = $1
     GROUP BY event_type
-  `).all(agentId);
+  `, [agentId]);
+
+  const events = result.rows;
 
   const counts = {};
   for (const e of events) counts[e.event_type] = e.cnt;
@@ -106,14 +108,16 @@ function computeTransactionPillar(agentId) {
  * Pillar 2: Capital Staked (0–100)
  * Looks at active insurance policies as a proxy for staked capital.
  */
-function computeCapitalPillar(agentId) {
-  const policies = db.prepare(`
+async function computeCapitalPillar(agentId) {
+  const result = await query(`
     SELECT SUM(coverage_amount_usdc) as total_coverage,
            SUM(premium_usdc) as total_premium,
            COUNT(*) as policy_count
     FROM insurance_policies
-    WHERE agent_id = ? AND status = 'active'
-  `).get(agentId);
+    WHERE agent_id = $1 AND status = 'active'
+  `, [agentId]);
+
+  const policies = result.rows[0];
 
   const stakedUsdc = (policies?.total_coverage || 0) + (policies?.total_premium || 0);
 
@@ -138,15 +142,17 @@ function computeCapitalPillar(agentId) {
  * Simplified PageRank approximation from the transaction graph.
  * Counts unique counterparties and transaction volume as centrality proxies.
  */
-function computeCentralityPillar(agentId) {
-  const txData = db.prepare(`
+async function computeCentralityPillar(agentId) {
+  const result = await query(`
     SELECT
       COUNT(DISTINCT counterparty_id) as unique_counterparties,
       SUM(CASE WHEN transaction_value > 0 THEN transaction_value ELSE 0 END) as total_volume,
       COUNT(*) as total_events
     FROM behavioral_events
-    WHERE agent_id = ? AND counterparty_id IS NOT NULL
-  `).get(agentId);
+    WHERE agent_id = $1 AND counterparty_id IS NOT NULL
+  `, [agentId]);
+
+  const txData = result.rows[0];
 
   const uniqueCounterparties = txData?.unique_counterparties || 0;
   const totalVolume = txData?.total_volume || 0;
@@ -173,8 +179,9 @@ function computeCentralityPillar(agentId) {
  * Pillar 4: Identity Strength (0–100)
  * Checksum stability, DID anchor, key age, ZKP credentials.
  */
-function computeIdentityPillar(agentId) {
-  const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(agentId);
+async function computeIdentityPillar(agentId) {
+  const agentResult = await query('SELECT * FROM agents WHERE id = $1', [agentId]);
+  const agent = agentResult.rows[0];
   if (!agent) return { score: 0, details: { error: 'agent_not_found' }, reasonCodes: ['AGENT_NOT_FOUND'] };
 
   let score = 0;
@@ -200,16 +207,18 @@ function computeIdentityPillar(agentId) {
   score += ageBonus;
 
   // ZKP / identity credentials: +15 per credential, up to +25
-  const idCreds = db.prepare(`
+  const idCredsResult = await query(`
     SELECT COUNT(*) as cnt FROM credentials
-    WHERE agent_id = ? AND credential_type = 'identity_verification' AND status = 'active'
-  `).get(agentId);
+    WHERE agent_id = $1 AND credential_type = 'identity_verification' AND status = 'active'
+  `, [agentId]);
+  const idCreds = idCredsResult.rows[0];
   const zkpScore = Math.min(25, (idCreds?.cnt || 0) * 15);
   score += zkpScore;
   if ((idCreds?.cnt || 0) === 0) reasonCodes.push('NO_IDENTITY_CREDENTIALS');
 
   // Version stability: fewer major changes = higher stability (up to 5 bonus)
-  const versionCount = db.prepare('SELECT COUNT(*) as cnt FROM agent_versions WHERE agent_id = ?').get(agentId);
+  const versionResult = await query('SELECT COUNT(*) as cnt FROM agent_versions WHERE agent_id = $1', [agentId]);
+  const versionCount = versionResult.rows[0];
   if ((versionCount?.cnt || 0) <= 3) score += 5;
 
   score = Math.min(100, Math.max(0, score));
@@ -232,8 +241,9 @@ function computeIdentityPillar(agentId) {
  * Pillar 5: Compliance (0–100)
  * EU AI Act class, NIST alignment, compliance certifications.
  */
-function computeCompliancePillar(agentId) {
-  const agent = db.prepare('SELECT eu_ai_act_class, nist_ai_rmf_aligned FROM agents WHERE id = ?').get(agentId);
+async function computeCompliancePillar(agentId) {
+  const agentResult = await query('SELECT eu_ai_act_class, nist_ai_rmf_aligned FROM agents WHERE id = $1', [agentId]);
+  const agent = agentResult.rows[0];
   if (!agent) return { score: 0, details: {}, reasonCodes: ['AGENT_NOT_FOUND'] };
 
   let score = 0;
@@ -256,10 +266,11 @@ function computeCompliancePillar(agentId) {
   else reasonCodes.push('NOT_NIST_ALIGNED');
 
   // Compliance certifications: +10 each, up to 35
-  const compCreds = db.prepare(`
+  const compCredsResult = await query(`
     SELECT COUNT(*) as cnt FROM credentials
-    WHERE agent_id = ? AND credential_type = 'compliance_certification' AND status = 'active'
-  `).get(agentId);
+    WHERE agent_id = $1 AND credential_type = 'compliance_certification' AND status = 'active'
+  `, [agentId]);
+  const compCreds = compCredsResult.rows[0];
   const compBonus = Math.min(35, (compCreds?.cnt || 0) * 10);
   score += compBonus;
   if ((compCreds?.cnt || 0) === 0) reasonCodes.push('NO_COMPLIANCE_CERTIFICATIONS');
@@ -332,19 +343,20 @@ function maxTransactionFromScore(score) {
  * Compute and persist a new trust score for the agent.
  *
  * @param {string} agentId
- * @returns {{ success: boolean, scoreRecord?: object, error?: string }}
+ * @returns {Promise<{ success: boolean, scoreRecord?: object, error?: string }>}
  */
-export function computeTrustScore(agentId) {
+export async function computeTrustScore(agentId) {
   try {
-    const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(agentId);
+    const agentResult = await query('SELECT * FROM agents WHERE id = $1', [agentId]);
+    const agent = agentResult.rows[0];
     if (!agent) return { success: false, error: 'Agent not found' };
 
     const pillars = {
-      transaction: computeTransactionPillar(agentId),
-      capital:     computeCapitalPillar(agentId),
-      centrality:  computeCentralityPillar(agentId),
-      identity:    computeIdentityPillar(agentId),
-      compliance:  computeCompliancePillar(agentId),
+      transaction: await computeTransactionPillar(agentId),
+      capital:     await computeCapitalPillar(agentId),
+      centrality:  await computeCentralityPillar(agentId),
+      identity:    await computeIdentityPillar(agentId),
+      compliance:  await computeCompliancePillar(agentId),
     };
 
     const score   = Math.max(0, Math.min(1000, computeComposite(pillars)));
@@ -356,7 +368,7 @@ export function computeTrustScore(agentId) {
 
     const id = uuidv4();
 
-    db.prepare(`
+    await query(`
       INSERT INTO trust_scores (
         id, agent_id, score, tier,
         identity_score, behavior_score, fidelity_score, compliance_score, provenance_score,
@@ -364,13 +376,13 @@ export function computeTrustScore(agentId) {
         reason_codes, flags, verdict, max_transaction, human_review_required,
         score_version, model_version, computed_at
       ) VALUES (
-        ?, ?,  ?, ?,
-        ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
-        '1.0', '1.0', datetime('now')
+        $1, $2,  $3, $4,
+        $5, $6, $7, $8, $9,
+        $10, $11, $12, $13, $14,
+        $15, $16, $17, $18, $19,
+        '1.0', '1.0', NOW()::TEXT
       )
-    `).run(
+    `, [
       id, agentId, score, tier,
       pillars.identity.score,
       pillars.transaction.score,
@@ -387,14 +399,14 @@ export function computeTrustScore(agentId) {
       verdict,
       maxTx,
       flags.includes('AGENT_SUSPENDED') || score < 200 ? 1 : 0
-    );
+    ]);
 
     // Update agent's cached trust score and tier
-    db.prepare(`
-      UPDATE agents SET trust_score = ?, trust_tier = ?, updated_at = datetime('now') WHERE id = ?
-    `).run(score, tier, agentId);
+    await query(`
+      UPDATE agents SET trust_score = $1, trust_tier = $2, updated_at = NOW()::TEXT WHERE id = $3
+    `, [score, tier, agentId]);
 
-    audit.log('system', 'system', 'score.compute', 'trust_score', id,
+    await audit.log('system', 'system', 'score.compute', 'trust_score', id,
       { agentId, score, tier, verdict });
 
     return {
@@ -425,17 +437,19 @@ export function computeTrustScore(agentId) {
  * Get the latest trust score for an agent.
  *
  * @param {string} agentId
- * @returns {{ success: boolean, scoreRecord?: object, error?: string }}
+ * @returns {Promise<{ success: boolean, scoreRecord?: object, error?: string }>}
  */
-export function getTrustScore(agentId) {
+export async function getTrustScore(agentId) {
   try {
-    const row = db.prepare(`
-      SELECT * FROM trust_scores WHERE agent_id = ? ORDER BY computed_at DESC LIMIT 1
-    `).get(agentId);
+    const result = await query(`
+      SELECT * FROM trust_scores WHERE agent_id = $1 ORDER BY computed_at DESC LIMIT 1
+    `, [agentId]);
+
+    const row = result.rows[0];
 
     if (!row) {
       // No score yet — compute on first request
-      return computeTrustScore(agentId);
+      return await computeTrustScore(agentId);
     }
 
     return { success: true, scoreRecord: deserializeScore(row) };
@@ -449,17 +463,17 @@ export function getTrustScore(agentId) {
  *
  * @param {string} agentId
  * @param {number} [limit=30]
- * @returns {{ success: boolean, history?: object[], error?: string }}
+ * @returns {Promise<{ success: boolean, history?: object[], error?: string }>}
  */
-export function getScoreHistory(agentId, limit = 30) {
+export async function getScoreHistory(agentId, limit = 30) {
   try {
-    const rows = db.prepare(`
-      SELECT * FROM trust_scores WHERE agent_id = ? ORDER BY computed_at DESC LIMIT ?
-    `).all(agentId, limit);
+    const result = await query(`
+      SELECT * FROM trust_scores WHERE agent_id = $1 ORDER BY computed_at DESC LIMIT $2
+    `, [agentId, limit]);
 
     return {
       success: true,
-      history: rows.map(deserializeScore),
+      history: result.rows.map(deserializeScore),
     };
   } catch (err) {
     return { success: false, error: err.message };
@@ -471,17 +485,19 @@ export function getScoreHistory(agentId, limit = 30) {
  * Returns quickly without full pillar recomputation — uses latest cached score.
  *
  * @param {string} agentId
- * @returns {{ success: boolean, verdict?: string, score?: number, tier?: string, flags?: string[], error?: string }}
+ * @returns {Promise<{ success: boolean, verdict?: string, score?: number, tier?: string, flags?: string[], error?: string }>}
  */
-export function quickRiskCheck(agentId) {
+export async function quickRiskCheck(agentId) {
   try {
-    const agent = db.prepare('SELECT id, status, trust_score, trust_tier FROM agents WHERE id = ?').get(agentId);
+    const agentResult = await query('SELECT id, status, trust_score, trust_tier FROM agents WHERE id = $1', [agentId]);
+    const agent = agentResult.rows[0];
     if (!agent) return { success: false, error: 'Agent not found', verdict: 'BLOCK' };
 
-    const latest = db.prepare(`
+    const latestResult = await query(`
       SELECT score, tier, verdict, flags, max_transaction, human_review_required, computed_at
-      FROM trust_scores WHERE agent_id = ? ORDER BY computed_at DESC LIMIT 1
-    `).get(agentId);
+      FROM trust_scores WHERE agent_id = $1 ORDER BY computed_at DESC LIMIT 1
+    `, [agentId]);
+    const latest = latestResult.rows[0];
 
     const score = latest?.score ?? agent.trust_score ?? 0;
     const tier  = latest?.tier  ?? agent.trust_tier  ?? 'unverified';
@@ -496,7 +512,7 @@ export function quickRiskCheck(agentId) {
       verdict = verdictFromScore(score, flags);
     }
 
-    audit.log('system', 'system', 'score.quick_risk_check', 'agent', agentId, { verdict, score, tier });
+    await audit.log('system', 'system', 'score.quick_risk_check', 'agent', agentId, { verdict, score, tier });
 
     return {
       success: true,

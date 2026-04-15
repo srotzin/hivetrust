@@ -56,7 +56,7 @@ router.post('/list', async (req, res) => {
 
 router.get('/listings', async (req, res) => {
   try {
-    const result = getListings(req.query);
+    const result = await getListings(req.query);
     return ok(res, result);
   } catch (e) {
     console.error('[GET /liquidation/listings]', e.message);
@@ -68,7 +68,7 @@ router.get('/listings', async (req, res) => {
 
 router.get('/listing/:listing_id', async (req, res) => {
   try {
-    const result = getListing(req.params.listing_id);
+    const result = await getListing(req.params.listing_id);
     return ok(res, result);
   } catch (e) {
     console.error('[GET /liquidation/listing/:id]', e.message);
@@ -105,7 +105,7 @@ router.post('/buy', async (req, res) => {
 
 router.post('/cancel/:listing_id', async (req, res) => {
   try {
-    const result = cancelListing(req.params.listing_id);
+    const result = await cancelListing(req.params.listing_id);
     return ok(res, result);
   } catch (e) {
     console.error('[POST /liquidation/cancel/:id]', e.message);
@@ -117,7 +117,7 @@ router.post('/cancel/:listing_id', async (req, res) => {
 
 router.get('/history', async (req, res) => {
   try {
-    const result = getHistory(req.query);
+    const result = await getHistory(req.query);
     return ok(res, result);
   } catch (e) {
     console.error('[GET /liquidation/history]', e.message);
@@ -129,7 +129,7 @@ router.get('/history', async (req, res) => {
 
 router.get('/stats', async (req, res) => {
   try {
-    const result = getMarketStats();
+    const result = await getMarketStats();
     return ok(res, result);
   } catch (e) {
     console.error('[GET /liquidation/stats]', e.message);

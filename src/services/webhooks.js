@@ -11,7 +11,7 @@
  *   X-HiveTrust-Timestamp:<unix_seconds>
  */
 
-import db from '../db.js';
+import { query } from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { createHmac, randomBytes } from 'crypto';
 import * as audit from './audit.js';
@@ -29,7 +29,7 @@ const MAX_RETRIES = 5;
  * @param {string}   [ipAddress]
  * @returns {{ success: boolean, endpoint?: object, secret?: string, error?: string }}
  */
-export function registerWebhook(ownerId, url, events = ['*'], ipAddress = null) {
+export async function registerWebhook(ownerId, url, events = ['*'], ipAddress = null) {
   try {
     if (!ownerId) return { success: false, error: 'ownerId is required' };
     if (!url)     return { success: false, error: 'url is required' };
@@ -41,12 +41,12 @@ export function registerWebhook(ownerId, url, events = ['*'], ipAddress = null) 
     const id     = uuidv4();
     const secret = randomBytes(32).toString('hex'); // 64-char hex secret
 
-    db.prepare(`
+    await query(`
       INSERT INTO webhook_endpoints (id, owner_id, url, secret, events, status, created_at)
-      VALUES (?, ?, ?, ?, ?, 'active', datetime('now'))
-    `).run(id, ownerId, url, secret, JSON.stringify(events));
+      VALUES ($1, $2, $3, $4, $5, 'active', NOW()::TEXT)
+    `, [id, ownerId, url, secret, JSON.stringify(events)]);
 
-    audit.log(ownerId, 'user', 'webhook.register', 'webhook_endpoint', id,
+    await audit.log(ownerId, 'user', 'webhook.register', 'webhook_endpoint', id,
       { url, events }, ipAddress);
 
     return {
@@ -65,15 +65,16 @@ export function registerWebhook(ownerId, url, events = ['*'], ipAddress = null) 
 /**
  * List webhook endpoints for an owner.
  */
-export function listWebhooks(ownerId) {
+export async function listWebhooks(ownerId) {
   try {
-    const rows = db.prepare(
-      'SELECT id, owner_id, url, events, status, created_at FROM webhook_endpoints WHERE owner_id = ?'
-    ).all(ownerId);
+    const result = await query(
+      'SELECT id, owner_id, url, events, status, created_at FROM webhook_endpoints WHERE owner_id = $1',
+      [ownerId]
+    );
 
     return {
       success: true,
-      endpoints: rows.map(r => ({ ...r, events: JSON.parse(r.events || '["*"]') })),
+      endpoints: result.rows.map(r => ({ ...r, events: JSON.parse(r.events || '["*"]') })),
     };
   } catch (err) {
     return { success: false, error: err.message };
@@ -85,15 +86,16 @@ export function listWebhooks(ownerId) {
 /**
  * Deactivate (remove) a webhook endpoint.
  */
-export function deactivateWebhook(endpointId, ownerId, ipAddress = null) {
+export async function deactivateWebhook(endpointId, ownerId, ipAddress = null) {
   try {
-    const ep = db.prepare('SELECT * FROM webhook_endpoints WHERE id = ?').get(endpointId);
+    const result = await query('SELECT * FROM webhook_endpoints WHERE id = $1', [endpointId]);
+    const ep = result.rows[0];
     if (!ep) return { success: false, error: 'Webhook endpoint not found' };
     if (ep.owner_id !== ownerId) return { success: false, error: 'Unauthorized' };
 
-    db.prepare("UPDATE webhook_endpoints SET status = 'inactive' WHERE id = ?").run(endpointId);
+    await query("UPDATE webhook_endpoints SET status = 'inactive' WHERE id = $1", [endpointId]);
 
-    audit.log(ownerId, 'user', 'webhook.deactivate', 'webhook_endpoint', endpointId, {}, ipAddress);
+    await audit.log(ownerId, 'user', 'webhook.deactivate', 'webhook_endpoint', endpointId, {}, ipAddress);
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
@@ -111,9 +113,9 @@ export function deactivateWebhook(endpointId, ownerId, ipAddress = null) {
  */
 export async function deliverWebhook(eventType, payload) {
   try {
-    const endpoints = db.prepare("SELECT * FROM webhook_endpoints WHERE status = 'active'").all();
+    const epResult = await query("SELECT * FROM webhook_endpoints WHERE status = 'active'", []);
 
-    const matching = endpoints.filter(ep => {
+    const matching = epResult.rows.filter(ep => {
       const evts = JSON.parse(ep.events || '["*"]');
       return evts.includes('*') || evts.includes(eventType);
     });
@@ -134,10 +136,10 @@ export async function deliverWebhook(eventType, payload) {
 
       const signature = signPayload(ep.secret, body);
 
-      db.prepare(`
+      await query(`
         INSERT INTO webhook_deliveries (id, endpoint_id, event_type, payload, status, attempts, created_at)
-        VALUES (?, ?, ?, ?, 'pending', 0, datetime('now'))
-      `).run(deliveryId, ep.id, eventType, body);
+        VALUES ($1, $2, $3, $4, 'pending', 0, NOW()::TEXT)
+      `, [deliveryId, ep.id, eventType, body]);
 
       const result = await attemptDelivery(ep, deliveryId, body, signature, eventType, timestamp);
       deliveries.push(result);
@@ -158,15 +160,16 @@ export async function deliverWebhook(eventType, payload) {
  */
 export async function retryPendingDeliveries() {
   try {
-    const pending = db.prepare(`
+    const result = await query(`
       SELECT wd.*, we.url, we.secret
       FROM webhook_deliveries wd
       JOIN webhook_endpoints we ON wd.endpoint_id = we.id
-      WHERE wd.status IN ('pending', 'failed') AND wd.attempts < ?
+      WHERE wd.status IN ('pending', 'failed') AND wd.attempts < $1
       ORDER BY wd.created_at ASC
       LIMIT 50
-    `).all(MAX_RETRIES);
+    `, [MAX_RETRIES]);
 
+    const pending = result.rows;
     const results = [];
     for (const delivery of pending) {
       const backoffSeconds = Math.pow(2, delivery.attempts) * 5;
@@ -180,8 +183,8 @@ export async function retryPendingDeliveries() {
       const timestamp = Math.floor(new Date(delivery.created_at).getTime() / 1000);
       const signature = signPayload(ep.secret, delivery.payload);
 
-      const result = await attemptDelivery(ep, delivery.id, delivery.payload, signature, delivery.event_type, timestamp);
-      results.push(result);
+      const res = await attemptDelivery(ep, delivery.id, delivery.payload, signature, delivery.event_type, timestamp);
+      results.push(res);
     }
 
     return { success: true, processed: results.length, results };
@@ -199,9 +202,10 @@ function signPayload(secret, body) {
 async function attemptDelivery(ep, deliveryId, body, signature, eventType, timestamp) {
   const now = new Date().toISOString();
 
-  db.prepare(
-    'UPDATE webhook_deliveries SET attempts = attempts + 1, last_attempt_at = ? WHERE id = ?'
-  ).run(now, deliveryId);
+  await query(
+    'UPDATE webhook_deliveries SET attempts = attempts + 1, last_attempt_at = $1 WHERE id = $2',
+    [now, deliveryId]
+  );
 
   try {
     const controller = new AbortController();
@@ -224,18 +228,19 @@ async function attemptDelivery(ep, deliveryId, body, signature, eventType, times
     clearTimeout(timeoutId);
 
     if (response.ok) {
-      db.prepare(
-        "UPDATE webhook_deliveries SET status = 'delivered', delivered_at = ? WHERE id = ?"
-      ).run(now, deliveryId);
+      await query(
+        "UPDATE webhook_deliveries SET status = 'delivered', delivered_at = $1 WHERE id = $2",
+        [now, deliveryId]
+      );
       return { deliveryId, endpointId: ep.id, status: 'delivered', httpStatus: response.status };
     }
 
-    db.prepare("UPDATE webhook_deliveries SET status = 'failed' WHERE id = ?").run(deliveryId);
+    await query("UPDATE webhook_deliveries SET status = 'failed' WHERE id = $1", [deliveryId]);
     return { deliveryId, endpointId: ep.id, status: 'failed', httpStatus: response.status };
 
   } catch (fetchErr) {
     const isTimeout = fetchErr.name === 'AbortError';
-    db.prepare("UPDATE webhook_deliveries SET status = 'failed' WHERE id = ?").run(deliveryId);
+    await query("UPDATE webhook_deliveries SET status = 'failed' WHERE id = $1", [deliveryId]);
     return {
       deliveryId,
       endpointId: ep.id,

@@ -10,7 +10,7 @@
  *  - Registration fee: $4.99 USDC
  */
 
-import db from '../db.js';
+import { query } from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { createHash } from 'crypto';
 import * as audit from './audit.js';
@@ -84,9 +84,9 @@ function bumpVersion(current = '1.0.0') {
  * @param {string} [params.hiveagentId]       - Cross-reference to HiveAgent
  * @param {object} [params.metadata]
  * @param {string} [params.ipAddress]
- * @returns {{ success: boolean, agent?: object, error?: string }}
+ * @returns {Promise<{ success: boolean, agent?: object, error?: string }>}
  */
-export function registerAgent(params, ipAddress = null) {
+export async function registerAgent(params, ipAddress = null) {
   try {
     const {
       name,
@@ -114,7 +114,8 @@ export function registerAgent(params, ipAddress = null) {
     const keyFingerprint = computeKeyFingerprint(publicKey);
 
     // Guard: duplicate key
-    const existing = db.prepare('SELECT id FROM agents WHERE key_fingerprint = ?').get(keyFingerprint);
+    const existingResult = await query('SELECT id FROM agents WHERE key_fingerprint = $1', [keyFingerprint]);
+    const existing = existingResult.rows[0];
     if (existing) {
       return { success: false, error: 'An agent with this public key is already registered', agentId: existing.id };
     }
@@ -138,7 +139,7 @@ export function registerAgent(params, ipAddress = null) {
       created: now,
     });
 
-    db.prepare(`
+    await query(`
       INSERT INTO agents (
         id, version, name, description,
         public_key, public_key_format, key_fingerprint,
@@ -152,19 +153,19 @@ export function registerAgent(params, ipAddress = null) {
         hiveagent_id, metadata,
         created_at, updated_at
       ) VALUES (
-        ?, '1.0.0', ?, ?,
-        ?, 'ed25519-base58', ?,
-        ?, 'sha256', ?,
-        ?, ?, 0,
-        ?, ?, ?,
-        ?, ?,
-        ?, ?,
+        $1, '1.0.0', $2, $3,
+        $4, 'ed25519-base58', $5,
+        $6, 'sha256', $7,
+        $8, $9, 0,
+        $10, $11, $12,
+        $13, $14,
+        $15, $16,
         'provisional', 50.0, 300,
-        'active', ?, ?,
-        ?, ?,
-        datetime('now'), datetime('now')
+        'active', $17, $18,
+        $19, $20,
+        NOW()::TEXT, NOW()::TEXT
       )
-    `).run(
+    `, [
       id, name || null, description || null,
       publicKey, keyFingerprint,
       checksum, JSON.stringify(['system_prompt', 'tools', 'model_config']),
@@ -174,18 +175,19 @@ export function registerAgent(params, ipAddress = null) {
       euAiActClass, nistAiRmfAligned ? 1 : 0,
       did, didDocument,
       hiveagentId || null, JSON.stringify(metadata)
-    );
+    ]);
 
     // Record initial version
-    db.prepare(`
+    await query(`
       INSERT INTO agent_versions (id, agent_id, version, checksum, checksum_previous, changes, created_at)
-      VALUES (?, ?, '1.0.0', ?, NULL, ?, datetime('now'))
-    `).run(uuidv4(), id, checksum, JSON.stringify({ type: 'initial_registration' }));
+      VALUES ($1, $2, '1.0.0', $3, NULL, $4, NOW()::TEXT)
+    `, [uuidv4(), id, checksum, JSON.stringify({ type: 'initial_registration' })]);
 
-    audit.log(ownerId, 'user', 'agent.register', 'agent', id,
+    await audit.log(ownerId, 'user', 'agent.register', 'agent', id,
       { name, keyFingerprint, did, fee_usdc: REGISTRATION_FEE_USDC }, ipAddress);
 
-    const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(id);
+    const agentResult = await query('SELECT * FROM agents WHERE id = $1', [id]);
+    const agent = agentResult.rows[0];
     return { success: true, agent: deserializeAgent(agent), registration_fee_usdc: REGISTRATION_FEE_USDC };
   } catch (err) {
     console.error('[agent-identity] registerAgent failed:', err.message);
@@ -198,9 +200,10 @@ export function registerAgent(params, ipAddress = null) {
 /**
  * Get a single agent by ID.
  */
-export function getAgent(agentId) {
+export async function getAgent(agentId) {
   try {
-    const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(agentId);
+    const result = await query('SELECT * FROM agents WHERE id = $1', [agentId]);
+    const agent = result.rows[0];
     if (!agent) return { success: false, error: 'Agent not found' };
     return { success: true, agent: deserializeAgent(agent) };
   } catch (err) {
@@ -211,9 +214,10 @@ export function getAgent(agentId) {
 /**
  * Get agent by DID.
  */
-export function getAgentByDID(did) {
+export async function getAgentByDID(did) {
   try {
-    const agent = db.prepare('SELECT * FROM agents WHERE did = ?').get(did);
+    const result = await query('SELECT * FROM agents WHERE did = $1', [did]);
+    const agent = result.rows[0];
     if (!agent) return { success: false, error: 'Agent not found' };
     return { success: true, agent: deserializeAgent(agent) };
   } catch (err) {
@@ -224,9 +228,10 @@ export function getAgentByDID(did) {
 /**
  * Get agent by key fingerprint.
  */
-export function getAgentByFingerprint(fingerprint) {
+export async function getAgentByFingerprint(fingerprint) {
   try {
-    const agent = db.prepare('SELECT * FROM agents WHERE key_fingerprint = ?').get(fingerprint);
+    const result = await query('SELECT * FROM agents WHERE key_fingerprint = $1', [fingerprint]);
+    const agent = result.rows[0];
     if (!agent) return { success: false, error: 'Agent not found' };
     return { success: true, agent: deserializeAgent(agent) };
   } catch (err) {
@@ -244,9 +249,10 @@ export function getAgentByFingerprint(fingerprint) {
  * @param {string} [updatedBy]
  * @param {string} [ipAddress]
  */
-export function updateAgent(agentId, updates, updatedBy = null, ipAddress = null) {
+export async function updateAgent(agentId, updates, updatedBy = null, ipAddress = null) {
   try {
-    const existing = db.prepare('SELECT * FROM agents WHERE id = ?').get(agentId);
+    const existingResult = await query('SELECT * FROM agents WHERE id = $1', [agentId]);
+    const existing = existingResult.rows[0];
     if (!existing) return { success: false, error: 'Agent not found' };
     if (existing.status === 'deactivated') return { success: false, error: 'Agent is deactivated' };
 
@@ -285,37 +291,39 @@ export function updateAgent(agentId, updates, updatedBy = null, ipAddress = null
 
     const setClauses = [];
     const setParams = [];
+    let paramIdx = 1;
     for (const [col, val] of Object.entries(allowed)) {
       if (val !== undefined) {
-        setClauses.push(`${col} = ?`);
+        setClauses.push(`${col} = $${paramIdx++}`);
         setParams.push(val);
       }
     }
 
     // Always bump version, checksum, updated_at
-    setClauses.push('version = ?', 'checksum = ?', 'updated_at = datetime(\'now\')');
+    setClauses.push(`version = $${paramIdx++}`, `checksum = $${paramIdx++}`, `updated_at = NOW()::TEXT`);
     setParams.push(newVersion, newChecksum);
     setParams.push(agentId);
 
-    db.prepare(`UPDATE agents SET ${setClauses.join(', ')} WHERE id = ?`).run(...setParams);
+    await query(`UPDATE agents SET ${setClauses.join(', ')} WHERE id = $${paramIdx}`, setParams);
 
     // Record version history
-    db.prepare(`
+    await query(`
       INSERT INTO agent_versions (id, agent_id, version, checksum, checksum_previous, changes, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-    `).run(
+      VALUES ($1, $2, $3, $4, $5, $6, NOW()::TEXT)
+    `, [
       uuidv4(), agentId, newVersion, newChecksum, prevChecksum,
       JSON.stringify({ ...updates, updated_by: updatedBy })
-    );
+    ]);
 
-    audit.log(
+    await audit.log(
       updatedBy || agentId, updatedBy ? 'user' : 'agent',
       'agent.update', 'agent', agentId,
       { version: newVersion, checksum_changed: newChecksum !== prevChecksum },
       ipAddress
     );
 
-    const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(agentId);
+    const agentResult = await query('SELECT * FROM agents WHERE id = $1', [agentId]);
+    const agent = agentResult.rows[0];
     return { success: true, agent: deserializeAgent(agent) };
   } catch (err) {
     console.error('[agent-identity] updateAgent failed:', err.message);
@@ -328,17 +336,18 @@ export function updateAgent(agentId, updates, updatedBy = null, ipAddress = null
 /**
  * Deactivate an agent (soft delete).
  */
-export function deactivateAgent(agentId, reason = null, deactivatedBy = null, ipAddress = null) {
+export async function deactivateAgent(agentId, reason = null, deactivatedBy = null, ipAddress = null) {
   try {
-    const existing = db.prepare('SELECT id, status FROM agents WHERE id = ?').get(agentId);
+    const existingResult = await query('SELECT id, status FROM agents WHERE id = $1', [agentId]);
+    const existing = existingResult.rows[0];
     if (!existing) return { success: false, error: 'Agent not found' };
     if (existing.status === 'deactivated') return { success: false, error: 'Agent is already deactivated' };
 
-    db.prepare(`
-      UPDATE agents SET status = 'deactivated', suspended_reason = ?, updated_at = datetime('now') WHERE id = ?
-    `).run(reason, agentId);
+    await query(`
+      UPDATE agents SET status = 'deactivated', suspended_reason = $1, updated_at = NOW()::TEXT WHERE id = $2
+    `, [reason, agentId]);
 
-    audit.log(
+    await audit.log(
       deactivatedBy || agentId, deactivatedBy ? 'user' : 'agent',
       'agent.deactivate', 'agent', agentId,
       { reason }, ipAddress
@@ -355,11 +364,12 @@ export function deactivateAgent(agentId, reason = null, deactivatedBy = null, ip
 /**
  * Get version history for an agent.
  */
-export function getVersionHistory(agentId, limit = 20) {
+export async function getVersionHistory(agentId, limit = 20) {
   try {
-    const rows = db.prepare(`
-      SELECT * FROM agent_versions WHERE agent_id = ? ORDER BY created_at DESC LIMIT ?
-    `).all(agentId, limit);
+    const result = await query(`
+      SELECT * FROM agent_versions WHERE agent_id = $1 ORDER BY created_at DESC LIMIT $2
+    `, [agentId, limit]);
+    const rows = result.rows;
 
     return {
       success: true,

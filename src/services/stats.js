@@ -3,67 +3,70 @@
  * Aggregates platform-wide metrics for the /v1/stats endpoint and MCP tool.
  */
 
-import db from '../db.js';
+import { query } from '../db.js';
 
 /**
  * Retrieve platform-wide statistics.
  */
-export function getPlatformStats() {
-  const totalAgents = db.prepare('SELECT COUNT(*) as count FROM agents').get().count;
-  const activeAgents = db.prepare("SELECT COUNT(*) as count FROM agents WHERE status = 'active'").get().count;
+export async function getPlatformStats() {
+  const totalAgentsResult = await query('SELECT COUNT(*) as count FROM agents');
+  const totalAgents = totalAgentsResult.rows[0].count;
 
-  const tierCounts = db
-    .prepare(`
+  const activeAgentsResult = await query("SELECT COUNT(*) as count FROM agents WHERE status = $1", ['active']);
+  const activeAgents = activeAgentsResult.rows[0].count;
+
+  const tierResult = await query(`
       SELECT trust_tier, COUNT(*) as count
       FROM agents
       GROUP BY trust_tier
-    `)
-    .all()
-    .reduce((acc, row) => {
-      acc[row.trust_tier] = row.count;
-      return acc;
-    }, {});
+    `);
+  const tierCounts = tierResult.rows.reduce((acc, row) => {
+    acc[row.trust_tier] = row.count;
+    return acc;
+  }, {});
 
-  const avgScore = db
-    .prepare('SELECT AVG(trust_score) as avg FROM agents WHERE trust_score IS NOT NULL')
-    .get().avg || 0;
+  const avgScoreResult = await query('SELECT AVG(trust_score) as avg FROM agents WHERE trust_score IS NOT NULL');
+  const avgScore = avgScoreResult.rows[0].avg || 0;
 
-  const totalCredentials = db.prepare('SELECT COUNT(*) as count FROM credentials').get().count;
-  const activeCredentials = db
-    .prepare("SELECT COUNT(*) as count FROM credentials WHERE status = 'active'")
-    .get().count;
+  const totalCredentialsResult = await query('SELECT COUNT(*) as count FROM credentials');
+  const totalCredentials = totalCredentialsResult.rows[0].count;
 
-  const totalPolicies = db.prepare('SELECT COUNT(*) as count FROM insurance_policies').get().count;
-  const activePolicies = db
-    .prepare("SELECT COUNT(*) as count FROM insurance_policies WHERE status = 'active'")
-    .get().count;
+  const activeCredentialsResult = await query("SELECT COUNT(*) as count FROM credentials WHERE status = $1", ['active']);
+  const activeCredentials = activeCredentialsResult.rows[0].count;
 
-  const totalInsuredValue = db
-    .prepare("SELECT COALESCE(SUM(coverage_amount_usdc), 0) as total FROM insurance_policies WHERE status = 'active'")
-    .get().total;
+  const totalPoliciesResult = await query('SELECT COUNT(*) as count FROM insurance_policies');
+  const totalPolicies = totalPoliciesResult.rows[0].count;
 
-  const totalClaims = db.prepare('SELECT COUNT(*) as count FROM insurance_claims').get().count;
-  const pendingClaims = db
-    .prepare("SELECT COUNT(*) as count FROM insurance_claims WHERE status = 'filed'")
-    .get().count;
+  const activePoliciesResult = await query("SELECT COUNT(*) as count FROM insurance_policies WHERE status = $1", ['active']);
+  const activePolicies = activePoliciesResult.rows[0].count;
 
-  const totalDisputes = db.prepare('SELECT COUNT(*) as count FROM disputes').get().count;
-  const openDisputes = db
-    .prepare("SELECT COUNT(*) as count FROM disputes WHERE status = 'open'")
-    .get().count;
+  const totalInsuredValueResult = await query("SELECT COALESCE(SUM(coverage_amount_usdc), 0) as total FROM insurance_policies WHERE status = $1", ['active']);
+  const totalInsuredValue = totalInsuredValueResult.rows[0].total;
 
-  const totalEvents = db.prepare('SELECT COUNT(*) as count FROM behavioral_events').get().count;
+  const totalClaimsResult = await query('SELECT COUNT(*) as count FROM insurance_claims');
+  const totalClaims = totalClaimsResult.rows[0].count;
 
-  const federationPeers = db
-    .prepare("SELECT COUNT(*) as count FROM federation_peers WHERE status = 'active'")
-    .get().count;
+  const pendingClaimsResult = await query("SELECT COUNT(*) as count FROM insurance_claims WHERE status = $1", ['filed']);
+  const pendingClaims = pendingClaimsResult.rows[0].count;
+
+  const totalDisputesResult = await query('SELECT COUNT(*) as count FROM disputes');
+  const totalDisputes = totalDisputesResult.rows[0].count;
+
+  const openDisputesResult = await query("SELECT COUNT(*) as count FROM disputes WHERE status = $1", ['open']);
+  const openDisputes = openDisputesResult.rows[0].count;
+
+  const totalEventsResult = await query('SELECT COUNT(*) as count FROM behavioral_events');
+  const totalEvents = totalEventsResult.rows[0].count;
+
+  const federationPeersResult = await query("SELECT COUNT(*) as count FROM federation_peers WHERE status = $1", ['active']);
+  const federationPeers = federationPeersResult.rows[0].count;
 
   return {
     agents: {
       total: totalAgents,
       active: activeAgents,
       by_tier: tierCounts,
-      avg_trust_score: parseFloat(avgScore.toFixed(2)),
+      avg_trust_score: parseFloat(Number(avgScore).toFixed(2)),
     },
     credentials: {
       total: totalCredentials,
@@ -72,7 +75,7 @@ export function getPlatformStats() {
     insurance: {
       total_policies: totalPolicies,
       active_policies: activePolicies,
-      total_insured_value_usdc: parseFloat(totalInsuredValue.toFixed(6)),
+      total_insured_value_usdc: parseFloat(Number(totalInsuredValue).toFixed(6)),
       total_claims: totalClaims,
       pending_claims: pendingClaims,
     },

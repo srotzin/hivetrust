@@ -51,7 +51,7 @@ router.post('/compute', async (req, res) => {
 router.post('/decay', async (req, res) => {
   try {
     const { did, reason } = req.body;
-    const result = applyDecay(did, reason);
+    const result = await applyDecay(did, reason);
     return ok(res, result);
   } catch (e) {
     console.error('[POST /reputation/decay]', e.message);
@@ -63,7 +63,7 @@ router.post('/decay', async (req, res) => {
 
 router.get('/status/:did', async (req, res) => {
   try {
-    const result = getReputationStatus(req.params.did);
+    const result = await getReputationStatus(req.params.did);
     return ok(res, result);
   } catch (e) {
     console.error('[GET /reputation/status/:did]', e.message);
@@ -88,7 +88,7 @@ router.post('/revoke-memory', async (req, res) => {
 
 router.get('/departure-cost/:did', async (req, res) => {
   try {
-    const result = getDepartureCost(req.params.did);
+    const result = await getDepartureCost(req.params.did);
     return ok(res, result);
   } catch (e) {
     console.error('[GET /reputation/departure-cost/:did]', e.message);
