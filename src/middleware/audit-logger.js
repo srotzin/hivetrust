@@ -7,7 +7,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import db from '../db.js';
+import { query } from '../db.js';
 
 /**
  * Resolve the actor identity from the request (set by auth middleware).
@@ -49,19 +49,22 @@ export default function auditLogger(req, res, next) {
         user_agent: req.headers['user-agent'] || null,
       });
 
-      db.prepare(
+      query(
         `INSERT INTO audit_log (id, actor_id, actor_type, action, resource_type, resource_id, details, ip_address)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(
-        randomUUID(),
-        actor_id,
-        actor_type,
-        `${req.method} ${req.path}`,
-        'http_request',
-        req.path,
-        details,
-        ip
-      );
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          randomUUID(),
+          actor_id,
+          actor_type,
+          `${req.method} ${req.path}`,
+          'http_request',
+          req.path,
+          details,
+          ip,
+        ]
+      ).catch(err => {
+        console.error('[audit-logger] Failed to write audit log:', err.message);
+      });
     } catch (err) {
       console.error('[audit-logger] Failed to write audit log:', err.message);
     }

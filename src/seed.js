@@ -1,4 +1,4 @@
-import db from './db.js';
+import { query, getClient } from './db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { createHash } from 'crypto';
 
@@ -140,7 +140,7 @@ const AGENTS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Credentials (matches schema: id, agent_id, credential_type, issuer_id, issuer_did, subject, claims, proof, proof_type, status, issued_at, expires_at, revoked_at, revocation_reason, metadata)
+// Credentials
 // ---------------------------------------------------------------------------
 const CREDENTIALS = [
   {
@@ -191,7 +191,7 @@ const CREDENTIALS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Trust Scores (matches schema: id, agent_id, score, tier, identity_score, behavior_score, fidelity_score, compliance_score, provenance_score, identity_details, behavior_details, fidelity_details, compliance_details, provenance_details, reason_codes, flags, verdict, max_transaction, human_review_required, score_version, model_version, computed_at)
+// Trust Scores
 // ---------------------------------------------------------------------------
 const TRUST_SCORES = [
   {
@@ -236,7 +236,7 @@ const TRUST_SCORES = [
 ];
 
 // ---------------------------------------------------------------------------
-// API Key (matches schema: id, owner_id, key_hash, name, scopes, rate_limit, status, last_used_at, created_at, expires_at)
+// API Key
 // ---------------------------------------------------------------------------
 const API_KEY = {
   id: uuidv4(),
@@ -252,72 +252,83 @@ const API_KEY = {
 };
 
 // ---------------------------------------------------------------------------
+// Helper: build INSERT ... ON CONFLICT (id) DO UPDATE SET ... for an object
+// ---------------------------------------------------------------------------
+function upsertSql(table, obj, conflictCol = 'id') {
+  const cols = Object.keys(obj);
+  const placeholders = cols.map((_, i) => `$${i + 1}`);
+  const updates = cols
+    .filter(c => c !== conflictCol)
+    .map(c => `${c} = EXCLUDED.${c}`)
+    .join(', ');
+  return {
+    sql: `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${placeholders.join(', ')}) ON CONFLICT (${conflictCol}) DO UPDATE SET ${updates}`,
+    values: cols.map(c => obj[c]),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Main seeder
 // ---------------------------------------------------------------------------
 
 export async function seedDatabase() {
-  console.log('🌱  Starting HiveTrust database seed...');
+  console.log('  Starting HiveTrust database seed...');
 
-  const run = db.transaction(() => {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
     // Templates
-    console.log('  ↳ Inserting verification templates...');
-    const insertTemplate = db.prepare(`
-      INSERT OR REPLACE INTO verification_templates
-        (id, name, description, required_checks, min_trust_score, min_trust_tier, step_up_rules, base_cost_usdc, created_at, updated_at)
-      VALUES
-        (@id, @name, @description, @required_checks, @min_trust_score, @min_trust_tier, @step_up_rules, @base_cost_usdc, @created_at, @updated_at)
-    `);
-    for (const t of TEMPLATES) insertTemplate.run(t);
-    console.log(`     ✓ ${TEMPLATES.length} verification templates`);
+    console.log('  -> Inserting verification templates...');
+    for (const t of TEMPLATES) {
+      const { sql, values } = upsertSql('verification_templates', t);
+      await client.query(sql, values);
+    }
+    console.log(`     ${TEMPLATES.length} verification templates`);
 
     // Agents
-    console.log('  ↳ Inserting sample agents...');
-    const agentCols = Object.keys(AGENTS[0]);
-    const insertAgent = db.prepare(`
-      INSERT OR REPLACE INTO agents (${agentCols.join(', ')})
-      VALUES (${agentCols.map(c => '@' + c).join(', ')})
-    `);
-    for (const a of AGENTS) insertAgent.run(a);
-    console.log(`     ✓ ${AGENTS.length} agents (provisional, elevated, sovereign)`);
+    console.log('  -> Inserting sample agents...');
+    for (const a of AGENTS) {
+      const { sql, values } = upsertSql('agents', a);
+      await client.query(sql, values);
+    }
+    console.log(`     ${AGENTS.length} agents (provisional, elevated, sovereign)`);
 
     // Credentials
-    console.log('  ↳ Inserting sample credentials...');
-    const credCols = Object.keys(CREDENTIALS[0]);
-    const insertCred = db.prepare(`
-      INSERT OR REPLACE INTO credentials (${credCols.join(', ')})
-      VALUES (${credCols.map(c => '@' + c).join(', ')})
-    `);
-    for (const c of CREDENTIALS) insertCred.run(c);
-    console.log(`     ✓ ${CREDENTIALS.length} credentials`);
+    console.log('  -> Inserting sample credentials...');
+    for (const c of CREDENTIALS) {
+      const { sql, values } = upsertSql('credentials', c);
+      await client.query(sql, values);
+    }
+    console.log(`     ${CREDENTIALS.length} credentials`);
 
     // Trust Scores
-    console.log('  ↳ Inserting sample trust scores...');
-    const scoreCols = Object.keys(TRUST_SCORES[0]);
-    const insertScore = db.prepare(`
-      INSERT OR REPLACE INTO trust_scores (${scoreCols.join(', ')})
-      VALUES (${scoreCols.map(c => '@' + c).join(', ')})
-    `);
-    for (const s of TRUST_SCORES) insertScore.run(s);
-    console.log(`     ✓ ${TRUST_SCORES.length} trust scores`);
+    console.log('  -> Inserting sample trust scores...');
+    for (const s of TRUST_SCORES) {
+      const { sql, values } = upsertSql('trust_scores', s);
+      await client.query(sql, values);
+    }
+    console.log(`     ${TRUST_SCORES.length} trust scores`);
 
     // API Key
-    console.log('  ↳ Inserting platform test API key...');
-    const keyCols = Object.keys(API_KEY);
-    const insertKey = db.prepare(`
-      INSERT OR REPLACE INTO api_keys (${keyCols.join(', ')})
-      VALUES (${keyCols.map(c => '@' + c).join(', ')})
-    `);
-    insertKey.run(API_KEY);
-    console.log('     ✓ API key created (use X-API-Key: ht_test_key_2026)');
-  });
+    console.log('  -> Inserting platform test API key...');
+    const { sql: keySql, values: keyValues } = upsertSql('api_keys', API_KEY);
+    await client.query(keySql, keyValues);
+    console.log('     API key created (use X-API-Key: ht_test_key_2026)');
 
-  run();
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 
-  console.log('\n✅  Seed complete.');
+  console.log('\n  Seed complete.');
   console.log('\n   Agent IDs for testing:');
-  console.log(`     provisional → ${IDS.provisional}`);
-  console.log(`     elevated    → ${IDS.elevated}`);
-  console.log(`     sovereign   → ${IDS.sovereign}`);
+  console.log(`     provisional -> ${IDS.provisional}`);
+  console.log(`     elevated    -> ${IDS.elevated}`);
+  console.log(`     sovereign   -> ${IDS.sovereign}`);
   console.log('\n   API Key: ht_test_key_2026 (pass in X-API-Key header)');
 }
 

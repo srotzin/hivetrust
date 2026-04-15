@@ -10,7 +10,7 @@
  *  - insurance_bond
  */
 
-import db from '../db.js';
+import { query } from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { createHash } from 'crypto';
 import * as audit from './audit.js';
@@ -34,15 +34,16 @@ const VALID_TYPES = new Set([
  * @param {object}  claims         - Domain-specific claims object
  * @param {string}  [expiresAt]    - ISO 8601 expiry datetime
  * @param {object}  [metadata]
- * @returns {{ success: boolean, credential?: object, error?: string }}
+ * @returns {Promise<{ success: boolean, credential?: object, error?: string }>}
  */
-export function issueCredential(agentId, credentialType, issuerId, claims = {}, expiresAt = null, metadata = {}) {
+export async function issueCredential(agentId, credentialType, issuerId, claims = {}, expiresAt = null, metadata = {}) {
   try {
     if (!VALID_TYPES.has(credentialType)) {
       return { success: false, error: `Invalid credential type. Allowed: ${[...VALID_TYPES].join(', ')}` };
     }
 
-    const agent = db.prepare('SELECT id, did, status FROM agents WHERE id = ?').get(agentId);
+    const agentResult = await query('SELECT id, did, status FROM agents WHERE id = $1', [agentId]);
+    const agent = agentResult.rows[0];
     if (!agent) return { success: false, error: 'Agent not found' };
     if (agent.status !== 'active') return { success: false, error: 'Cannot issue credential to inactive agent' };
 
@@ -68,13 +69,13 @@ export function issueCredential(agentId, credentialType, issuerId, claims = {}, 
       proofValue: proofHash,
     });
 
-    db.prepare(`
+    await query(`
       INSERT INTO credentials (
         id, agent_id, credential_type, issuer_id, issuer_did,
         subject, claims, proof, proof_type,
         status, issued_at, expires_at, metadata
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Ed25519Signature2020', 'active', datetime('now'), ?, ?)
-    `).run(
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'Ed25519Signature2020', 'active', NOW()::TEXT, $9, $10)
+    `, [
       id, agentId, credentialType, issuerId,
       `did:hive:${issuerId}`,
       subject,
@@ -82,13 +83,13 @@ export function issueCredential(agentId, credentialType, issuerId, claims = {}, 
       proof,
       expiresAt || null,
       JSON.stringify(metadata)
-    );
+    ]);
 
-    audit.log(issuerId, 'system', 'credential.issue', 'credential', id,
+    await audit.log(issuerId, 'system', 'credential.issue', 'credential', id,
       { agentId, credentialType, expiresAt });
 
-    const row = db.prepare('SELECT * FROM credentials WHERE id = ?').get(id);
-    return { success: true, credential: deserializeCredential(row) };
+    const result = await query('SELECT * FROM credentials WHERE id = $1', [id]);
+    return { success: true, credential: deserializeCredential(result.rows[0]) };
   } catch (err) {
     console.error('[credentials] issueCredential failed:', err.message);
     return { success: false, error: err.message };
@@ -101,11 +102,12 @@ export function issueCredential(agentId, credentialType, issuerId, claims = {}, 
  * Verify a credential — checks existence, expiry, and revocation status.
  *
  * @param {string} credentialId
- * @returns {{ success: boolean, valid?: boolean, credential?: object, reason?: string, error?: string }}
+ * @returns {Promise<{ success: boolean, valid?: boolean, credential?: object, reason?: string, error?: string }>}
  */
-export function verifyCredential(credentialId) {
+export async function verifyCredential(credentialId) {
   try {
-    const row = db.prepare('SELECT * FROM credentials WHERE id = ?').get(credentialId);
+    const result = await query('SELECT * FROM credentials WHERE id = $1', [credentialId]);
+    const row = result.rows[0];
     if (!row) return { success: false, error: 'Credential not found' };
 
     const cred = deserializeCredential(row);
@@ -131,7 +133,8 @@ export function verifyCredential(credentialId) {
     }
 
     // Cross-check revocation registry
-    const revEntry = db.prepare('SELECT * FROM revocation_registry WHERE credential_id = ?').get(credentialId);
+    const revResult = await query('SELECT * FROM revocation_registry WHERE credential_id = $1', [credentialId]);
+    const revEntry = revResult.rows[0];
     if (revEntry) {
       return {
         success: true,
@@ -141,7 +144,7 @@ export function verifyCredential(credentialId) {
       };
     }
 
-    audit.log('system', 'system', 'credential.verify', 'credential', credentialId, { valid: true });
+    await audit.log('system', 'system', 'credential.verify', 'credential', credentialId, { valid: true });
 
     return { success: true, valid: true, credential: cred };
   } catch (err) {
@@ -159,27 +162,28 @@ export function verifyCredential(credentialId) {
  * @param {string} revokedBy      - Actor performing the revocation
  * @param {string} reason         - Human-readable reason
  * @param {object} [evidence]     - Supporting evidence
- * @returns {{ success: boolean, registryId?: string, error?: string }}
+ * @returns {Promise<{ success: boolean, registryId?: string, error?: string }>}
  */
-export function revokeCredential(credentialId, revokedBy, reason, evidence = {}) {
+export async function revokeCredential(credentialId, revokedBy, reason, evidence = {}) {
   try {
-    const row = db.prepare('SELECT * FROM credentials WHERE id = ?').get(credentialId);
+    const result = await query('SELECT * FROM credentials WHERE id = $1', [credentialId]);
+    const row = result.rows[0];
     if (!row) return { success: false, error: 'Credential not found' };
     if (row.status === 'revoked') return { success: false, error: 'Credential is already revoked' };
 
     const now = new Date().toISOString();
 
-    db.prepare(`
-      UPDATE credentials SET status = 'revoked', revoked_at = ?, revocation_reason = ? WHERE id = ?
-    `).run(now, reason, credentialId);
+    await query(`
+      UPDATE credentials SET status = 'revoked', revoked_at = $1, revocation_reason = $2 WHERE id = $3
+    `, [now, reason, credentialId]);
 
     const registryId = uuidv4();
-    db.prepare(`
+    await query(`
       INSERT INTO revocation_registry (id, credential_id, revoked_by, reason, evidence, revoked_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(registryId, credentialId, revokedBy, reason, JSON.stringify(evidence), now);
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [registryId, credentialId, revokedBy, reason, JSON.stringify(evidence), now]);
 
-    audit.log(revokedBy, 'user', 'credential.revoke', 'credential', credentialId,
+    await audit.log(revokedBy, 'user', 'credential.revoke', 'credential', credentialId,
       { reason, registryId });
 
     return { success: true, registryId, revokedAt: now };
@@ -196,24 +200,24 @@ export function revokeCredential(credentialId, revokedBy, reason, evidence = {})
  *
  * @param {string} agentId
  * @param {string} [status]  - 'active' | 'revoked' | 'expired' | undefined (all)
- * @returns {{ success: boolean, credentials?: object[], error?: string }}
+ * @returns {Promise<{ success: boolean, credentials?: object[], error?: string }>}
  */
-export function listCredentials(agentId, status = null) {
+export async function listCredentials(agentId, status = null) {
   try {
-    let query = 'SELECT * FROM credentials WHERE agent_id = ?';
+    let sql = 'SELECT * FROM credentials WHERE agent_id = $1';
     const params = [agentId];
 
     if (status) {
-      query += ' AND status = ?';
+      sql += ' AND status = $2';
       params.push(status);
     }
 
-    query += ' ORDER BY issued_at DESC';
+    sql += ' ORDER BY issued_at DESC';
 
-    const rows = db.prepare(query).all(...params);
+    const result = await query(sql, params);
     return {
       success: true,
-      credentials: rows.map(deserializeCredential),
+      credentials: result.rows.map(deserializeCredential),
     };
   } catch (err) {
     console.error('[credentials] listCredentials failed:', err.message);

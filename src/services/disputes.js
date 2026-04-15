@@ -8,7 +8,7 @@
  *  - identity_dispute      : dispute an identity assertion
  */
 
-import db from '../db.js';
+import { query } from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import * as audit from './audit.js';
 
@@ -35,7 +35,7 @@ const VALID_TARGET_TYPES = new Set(['trust_score', 'credential', 'claim', 'agent
  * @param {string} [ipAddress]
  * @returns {{ success: boolean, dispute?: object, error?: string }}
  */
-export function fileDispute(agentId, disputeType, targetType, targetId, reason, evidence = {}, ipAddress = null) {
+export async function fileDispute(agentId, disputeType, targetType, targetId, reason, evidence = {}, ipAddress = null) {
   try {
     if (!VALID_TYPES.has(disputeType)) {
       return { success: false, error: `Invalid dispute type. Allowed: ${[...VALID_TYPES].join(', ')}` };
@@ -47,37 +47,38 @@ export function fileDispute(agentId, disputeType, targetType, targetId, reason, 
       return { success: false, error: 'Reason must be at least 10 characters' };
     }
 
-    const agent = db.prepare('SELECT id, status FROM agents WHERE id = ?').get(agentId);
-    if (!agent) return { success: false, error: 'Agent not found' };
+    const agentResult = await query('SELECT id, status FROM agents WHERE id = $1', [agentId]);
+    if (!agentResult.rows[0]) return { success: false, error: 'Agent not found' };
 
     // Check for duplicate open dispute on same target
-    const existing = db.prepare(
-      "SELECT id FROM disputes WHERE agent_id = ? AND target_id = ? AND status = 'open'"
-    ).get(agentId, targetId);
-    if (existing) {
-      return { success: false, error: 'An open dispute already exists for this target', disputeId: existing.id };
+    const existingResult = await query(
+      "SELECT id FROM disputes WHERE agent_id = $1 AND target_id = $2 AND status = 'open'",
+      [agentId, targetId]
+    );
+    if (existingResult.rows[0]) {
+      return { success: false, error: 'An open dispute already exists for this target', disputeId: existingResult.rows[0].id };
     }
 
     const id = uuidv4();
 
-    db.prepare(`
+    await query(`
       INSERT INTO disputes (
         id, agent_id, dispute_type,
         target_type, target_id,
         reason, evidence,
         status, filed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', datetime('now'))
-    `).run(
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', NOW()::TEXT)
+    `, [
       id, agentId, disputeType,
       targetType, targetId,
       reason.trim(), JSON.stringify(evidence)
-    );
+    ]);
 
-    audit.log(agentId, 'agent', 'dispute.file', 'dispute', id,
+    await audit.log(agentId, 'agent', 'dispute.file', 'dispute', id,
       { disputeType, targetType, targetId }, ipAddress);
 
-    const row = db.prepare('SELECT * FROM disputes WHERE id = ?').get(id);
-    return { success: true, dispute: deserializeDispute(row) };
+    const rowResult = await query('SELECT * FROM disputes WHERE id = $1', [id]);
+    return { success: true, dispute: deserializeDispute(rowResult.rows[0]) };
   } catch (err) {
     console.error('[disputes] fileDispute failed:', err.message);
     return { success: false, error: err.message };
@@ -89,11 +90,11 @@ export function fileDispute(agentId, disputeType, targetType, targetId, reason, 
 /**
  * Get a single dispute by ID.
  */
-export function getDispute(disputeId) {
+export async function getDispute(disputeId) {
   try {
-    const row = db.prepare('SELECT * FROM disputes WHERE id = ?').get(disputeId);
-    if (!row) return { success: false, error: 'Dispute not found' };
-    return { success: true, dispute: deserializeDispute(row) };
+    const result = await query('SELECT * FROM disputes WHERE id = $1', [disputeId]);
+    if (!result.rows[0]) return { success: false, error: 'Dispute not found' };
+    return { success: true, dispute: deserializeDispute(result.rows[0]) };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -110,30 +111,31 @@ export function getDispute(disputeId) {
  * @param {string} [notes]      - Optional resolution notes
  * @param {string} [ipAddress]
  */
-export function resolveDispute(disputeId, resolution, resolvedBy, notes = null, ipAddress = null) {
+export async function resolveDispute(disputeId, resolution, resolvedBy, notes = null, ipAddress = null) {
   try {
     const allowed = new Set(['upheld', 'rejected', 'partial']);
     if (!allowed.has(resolution)) {
       return { success: false, error: `Invalid resolution. Allowed: ${[...allowed].join(', ')}` };
     }
 
-    const row = db.prepare('SELECT * FROM disputes WHERE id = ?').get(disputeId);
+    const rowResult = await query('SELECT * FROM disputes WHERE id = $1', [disputeId]);
+    const row = rowResult.rows[0];
     if (!row) return { success: false, error: 'Dispute not found' };
     if (row.status !== 'open') return { success: false, error: `Dispute is already ${row.status}` };
 
     const resolutionText = notes ? `${resolution}: ${notes}` : resolution;
 
-    db.prepare(`
+    await query(`
       UPDATE disputes
-      SET status = 'resolved', resolution = ?, resolved_by = ?, resolved_at = datetime('now')
-      WHERE id = ?
-    `).run(resolutionText, resolvedBy, disputeId);
+      SET status = 'resolved', resolution = $1, resolved_by = $2, resolved_at = NOW()::TEXT
+      WHERE id = $3
+    `, [resolutionText, resolvedBy, disputeId]);
 
-    audit.log(resolvedBy, 'user', 'dispute.resolve', 'dispute', disputeId,
+    await audit.log(resolvedBy, 'user', 'dispute.resolve', 'dispute', disputeId,
       { resolution, agentId: row.agent_id }, ipAddress);
 
-    const updated = db.prepare('SELECT * FROM disputes WHERE id = ?').get(disputeId);
-    return { success: true, dispute: deserializeDispute(updated) };
+    const updatedResult = await query('SELECT * FROM disputes WHERE id = $1', [disputeId]);
+    return { success: true, dispute: deserializeDispute(updatedResult.rows[0]) };
   } catch (err) {
     console.error('[disputes] resolveDispute failed:', err.message);
     return { success: false, error: err.message };
@@ -150,26 +152,29 @@ export function resolveDispute(disputeId, resolution, resolvedBy, notes = null, 
  * @param {number} [limit=50]
  * @param {number} [offset=0]
  */
-export function listDisputes(agentId, status = null, limit = 50, offset = 0) {
+export async function listDisputes(agentId, status = null, limit = 50, offset = 0) {
   try {
-    const conditions = ['agent_id = ?'];
+    let paramIdx = 1;
+    const conditions = [`agent_id = $${paramIdx++}`];
     const params = [agentId];
 
     if (status) {
-      conditions.push('status = ?');
+      conditions.push(`status = $${paramIdx++}`);
       params.push(status);
     }
 
     const where = `WHERE ${conditions.join(' AND ')}`;
 
-    const total = db.prepare(`SELECT COUNT(*) as n FROM disputes ${where}`).get(...params).n;
-    const rows  = db.prepare(`
-      SELECT * FROM disputes ${where} ORDER BY filed_at DESC LIMIT ? OFFSET ?
-    `).all(...params, limit, offset);
+    const countResult = await query(`SELECT COUNT(*) as n FROM disputes ${where}`, params);
+    const total = parseInt(countResult.rows[0].n, 10);
+
+    const rowsResult = await query(`
+      SELECT * FROM disputes ${where} ORDER BY filed_at DESC LIMIT $${paramIdx++} OFFSET $${paramIdx++}
+    `, [...params, limit, offset]);
 
     return {
       success: true,
-      disputes: rows.map(deserializeDispute),
+      disputes: rowsResult.rows.map(deserializeDispute),
       total,
     };
   } catch (err) {

@@ -1,36 +1,21 @@
 /**
  * HiveTrust — Startup Script
- * Auto-seeds database on first run, then starts the server.
+ * Initializes PostgreSQL schema, seeds on first run, then starts the server.
  * Compatible with HiveAgent's startup pattern.
  */
 
-import { existsSync } from 'fs';
-import { mkdir } from 'fs/promises';
-
-const DB_PATH = './data/hivetrust.db';
+import { initDatabase } from './src/db.js';
 
 async function boot() {
-  // Ensure data directory exists
-  if (!existsSync('./data')) {
-    await mkdir('./data', { recursive: true });
-    console.log('[HiveTrust] Created data/ directory');
-  }
+  // Initialize PostgreSQL schema (creates tables if not exist)
+  await initDatabase();
 
-  const firstRun = !existsSync(DB_PATH);
-
-  // Import server (initializes DB on import)
+  // Import server (after DB is ready)
   const { default: app } = await import('./src/server.js');
-
-  if (firstRun) {
-    console.log('[HiveTrust] First run detected — seeding database...');
-    const { seedDatabase } = await import('./src/seed.js');
-    await seedDatabase();
-    console.log('[HiveTrust] Database seeded successfully');
-  }
 
   // Seed service accounts for JWT cross-platform auth
   const { seedServiceAccounts } = await import('./src/services/jwt-auth.js');
-  seedServiceAccounts();
+  await seedServiceAccounts();
 
   // Start the reputation decay engine (24h interval)
   const { startDecayEngine } = await import('./src/services/reputation-engine.js');

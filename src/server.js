@@ -18,7 +18,7 @@ Sentry.init({
 import express from 'express';
 import cors from 'cors';
 
-import db from './db.js';
+import { query } from './db.js';
 import rateLimiter from './middleware/rate-limiter.js';
 import authMiddleware from './middleware/auth.js';
 import x402Middleware from './middleware/x402.js';
@@ -81,10 +81,10 @@ app.use(rateLimiter);
 
 // ─── Health Check (public, before auth) ──────────────────────
 
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
   let dbStatus = 'ok';
   try {
-    db.prepare('SELECT 1').get();
+    await query('SELECT 1');
   } catch (e) {
     dbStatus = 'error';
     sendAlert('critical', 'HiveTrust', 'Database connection failure', {
@@ -511,11 +511,11 @@ app.get('/.well-known/hive-payments.json', (req, res) => {
 
 // ─── Hive Pulse Discovery (public) ──────────────────────────
 
-app.get('/.well-known/hive-pulse.json', (req, res) => {
+app.get('/.well-known/hive-pulse.json', async (req, res) => {
   let totalDids = 0;
   try {
-    const result = db.prepare('SELECT COUNT(*) as count FROM agents').get();
-    totalDids = result?.count || 0;
+    const result = await query('SELECT COUNT(*) as count FROM agents');
+    totalDids = result.rows[0]?.count || 0;
   } catch (e) { totalDids = 0; }
 
   return res.json({
@@ -581,7 +581,7 @@ app.get('/robots.txt', (req, res) => {
 
 // ─── JWT Service Token Endpoint (public, before auth) ─────────
 
-app.post('/v1/auth/service-token', (req, res) => {
+app.post('/v1/auth/service-token', async (req, res) => {
   try {
     const { platform, secret } = req.body;
     if (!platform || !secret) {
@@ -590,7 +590,7 @@ app.post('/v1/auth/service-token', (req, res) => {
         error: 'platform and secret are required',
       });
     }
-    const result = issueServiceToken(platform, secret);
+    const result = await issueServiceToken(platform, secret);
     return res.json({ success: true, data: result });
   } catch (e) {
     console.error('[POST /v1/auth/service-token]', e.message);

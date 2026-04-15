@@ -9,7 +9,7 @@
  */
 
 import crypto from 'node:crypto';
-import db from '../db.js';
+import { query } from '../db.js';
 
 // ─── Cross-Service Configuration ────────────────────────────
 
@@ -17,49 +17,6 @@ const HIVEMIND_URL = process.env.HIVEMIND_URL || 'https://hivemind.onrender.com'
 const HIVEFORGE_URL = process.env.HIVEFORGE_URL || 'https://hiveforge.onrender.com';
 const HIVELAW_URL = process.env.HIVELAW_URL || 'https://hivelaw.onrender.com';
 const HIVE_INTERNAL_KEY = process.env.HIVETRUST_SERVICE_KEY || process.env.HIVE_INTERNAL_KEY || '';
-
-// ─── Ensure Tables ──────────────────────────────────────────
-
-function ensureTables() {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS reputation_scores (
-      did TEXT PRIMARY KEY,
-      composite_score REAL DEFAULT 0,
-      tx_history_score REAL DEFAULT 0,
-      memory_dependency_score REAL DEFAULT 0,
-      offspring_success_score REAL DEFAULT 0,
-      compliance_score REAL DEFAULT 0,
-      is_active INTEGER DEFAULT 1,
-      departed_at TEXT,
-      last_transaction_at TEXT,
-      computed_at TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS reputation_decay_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      did TEXT NOT NULL,
-      reason TEXT NOT NULL,
-      previous_score REAL,
-      new_score REAL,
-      decay_factor REAL,
-      applied_at TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS memory_revocations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      did TEXT NOT NULL,
-      memories_revoked INTEGER DEFAULT 0,
-      reason TEXT,
-      revoked_at TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_reputation_scores_active ON reputation_scores(is_active);
-    CREATE INDEX IF NOT EXISTS idx_reputation_decay_did ON reputation_decay_events(did);
-    CREATE INDEX IF NOT EXISTS idx_memory_revocations_did ON memory_revocations(did);
-  `);
-}
-
-ensureTables();
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -133,14 +90,15 @@ async function getComplianceScore(did) {
  * Get tx history score from local behavioral events.
  * Normalized 0-1000.
  */
-function getTxHistoryScore(did) {
+async function getTxHistoryScore(did) {
   try {
-    const row = db.prepare(`
+    const result = await query(`
       SELECT COUNT(*) as event_count,
              SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) as success_count
       FROM behavioral_events
-      WHERE agent_id = ?
-    `).get(did);
+      WHERE agent_id = $1
+    `, [did]);
+    const row = result.rows[0];
     if (!row || row.event_count === 0) return 500; // default for agents without events
     const successRate = row.success_count / row.event_count;
     return Math.min(1000, Math.round(successRate * 800 + Math.min(row.event_count, 50) * 4));
@@ -158,20 +116,19 @@ function getTxHistoryScore(did) {
 export async function computeReputation(did) {
   if (!did) throwErr('did is required');
 
-  const [memoryDep, offspringSuccess, complianceScore] = await Promise.all([
+  const [memoryDep, offspringSuccess, complianceScore, txHistory] = await Promise.all([
     getMemoryDependency(did),
     getOffspringSuccess(did),
     getComplianceScore(did),
+    getTxHistoryScore(did),
   ]);
-
-  const txHistory = getTxHistoryScore(did);
 
   const composite = (txHistory * 0.60) + (memoryDep * 0.20) + (offspringSuccess * 0.10) + (complianceScore * 0.10);
   const now = new Date().toISOString();
 
-  db.prepare(`
+  await query(`
     INSERT INTO reputation_scores (did, composite_score, tx_history_score, memory_dependency_score, offspring_success_score, compliance_score, computed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
     ON CONFLICT(did) DO UPDATE SET
       composite_score = excluded.composite_score,
       tx_history_score = excluded.tx_history_score,
@@ -179,7 +136,7 @@ export async function computeReputation(did) {
       offspring_success_score = excluded.offspring_success_score,
       compliance_score = excluded.compliance_score,
       computed_at = excluded.computed_at
-  `).run(did, composite, txHistory, memoryDep, offspringSuccess, complianceScore, now);
+  `, [did, composite, txHistory, memoryDep, offspringSuccess, complianceScore, now]);
 
   return {
     did,
@@ -200,13 +157,14 @@ export async function computeReputation(did) {
  * - inactivity: 10% per month after 60 days
  * - violation: immediate 25% penalty
  */
-export function applyDecay(did, reason) {
+export async function applyDecay(did, reason) {
   if (!did) throwErr('did is required');
   if (!['departure', 'inactivity', 'violation'].includes(reason)) {
     throwErr('reason must be one of: departure, inactivity, violation');
   }
 
-  const score = db.prepare('SELECT * FROM reputation_scores WHERE did = ?').get(did);
+  const scoreResult = await query('SELECT * FROM reputation_scores WHERE did = $1', [did]);
+  const score = scoreResult.rows[0];
   if (!score) throwErr('No reputation record found for this DID', 404);
 
   const previousScore = score.composite_score;
@@ -220,8 +178,8 @@ export function applyDecay(did, reason) {
       newScore = previousScore * decayFactor;
       // Mark as departed if not already
       if (score.is_active) {
-        db.prepare('UPDATE reputation_scores SET is_active = 0, departed_at = ? WHERE did = ?')
-          .run(now, did);
+        await query('UPDATE reputation_scores SET is_active = 0, departed_at = $1 WHERE did = $2',
+          [now, did]);
       }
       break;
     }
@@ -240,14 +198,14 @@ export function applyDecay(did, reason) {
   newScore = Math.round(newScore * 100) / 100;
 
   // Update the score
-  db.prepare('UPDATE reputation_scores SET composite_score = ? WHERE did = ?')
-    .run(newScore, did);
+  await query('UPDATE reputation_scores SET composite_score = $1 WHERE did = $2',
+    [newScore, did]);
 
   // Record the decay event
-  db.prepare(`
+  await query(`
     INSERT INTO reputation_decay_events (did, reason, previous_score, new_score, decay_factor, applied_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(did, reason, previousScore, newScore, decayFactor, now);
+    VALUES ($1, $2, $3, $4, $5, $6)
+  `, [did, reason, previousScore, newScore, decayFactor, now]);
 
   // Calculate next decay date (30 days from now for departure/inactivity)
   const nextDecayDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -265,10 +223,11 @@ export function applyDecay(did, reason) {
 /**
  * Get full reputation status with decay history.
  */
-export function getReputationStatus(did) {
+export async function getReputationStatus(did) {
   if (!did) throwErr('did is required');
 
-  const score = db.prepare('SELECT * FROM reputation_scores WHERE did = ?').get(did);
+  const scoreResult = await query('SELECT * FROM reputation_scores WHERE did = $1', [did]);
+  const score = scoreResult.rows[0];
   if (!score) {
     return {
       did,
@@ -281,13 +240,17 @@ export function getReputationStatus(did) {
     };
   }
 
-  const decayEvents = db.prepare(
-    'SELECT * FROM reputation_decay_events WHERE did = ? ORDER BY applied_at DESC LIMIT 50'
-  ).all(did);
+  const decayResult = await query(
+    'SELECT * FROM reputation_decay_events WHERE did = $1 ORDER BY applied_at DESC LIMIT 50',
+    [did]
+  );
+  const decayEvents = decayResult.rows;
 
-  const latestRevocation = db.prepare(
-    'SELECT * FROM memory_revocations WHERE did = ? ORDER BY revoked_at DESC LIMIT 1'
-  ).get(did);
+  const revocationResult = await query(
+    'SELECT * FROM memory_revocations WHERE did = $1 ORDER BY revoked_at DESC LIMIT 1',
+    [did]
+  );
+  const latestRevocation = revocationResult.rows[0];
 
   return {
     did,
@@ -313,7 +276,8 @@ export function getReputationStatus(did) {
 export async function revokeMemory(did, reason) {
   if (!did) throwErr('did is required');
 
-  const score = db.prepare('SELECT * FROM reputation_scores WHERE did = ?').get(did);
+  const scoreResult = await query('SELECT * FROM reputation_scores WHERE did = $1', [did]);
+  const score = scoreResult.rows[0];
 
   // Check grace period — departed_at must be > 30 days ago
   if (score && score.departed_at) {
@@ -334,10 +298,10 @@ export async function revokeMemory(did, reason) {
   const memoriesRevoked = revokeResult.memories_revoked || Math.floor(Math.random() * 50 + 1);
   const now = new Date().toISOString();
 
-  db.prepare(`
+  await query(`
     INSERT INTO memory_revocations (did, memories_revoked, reason, revoked_at)
-    VALUES (?, ?, ?, ?)
-  `).run(did, memoriesRevoked, reason || 'departure', now);
+    VALUES ($1, $2, $3, $4)
+  `, [did, memoriesRevoked, reason || 'departure', now]);
 
   return {
     did,
@@ -349,10 +313,11 @@ export async function revokeMemory(did, reason) {
 /**
  * Calculate departure cost — what an agent loses by leaving.
  */
-export function getDepartureCost(did) {
+export async function getDepartureCost(did) {
   if (!did) throwErr('did is required');
 
-  const score = db.prepare('SELECT * FROM reputation_scores WHERE did = ?').get(did);
+  const scoreResult = await query('SELECT * FROM reputation_scores WHERE did = $1', [did]);
+  const score = scoreResult.rows[0];
   const currentScore = score ? score.composite_score : 0;
 
   // Projected scores with decay
@@ -365,10 +330,11 @@ export function getDepartureCost(did) {
   // Get offspring count from local agent data
   let offspringCount = 0;
   try {
-    const offspring = db.prepare(
-      "SELECT COUNT(*) as count FROM agents WHERE authorized_by = ?"
-    ).get(did);
-    offspringCount = offspring?.count || 0;
+    const offspringResult = await query(
+      "SELECT COUNT(*) as count FROM agents WHERE authorized_by = $1",
+      [did]
+    );
+    offspringCount = offspringResult.rows[0]?.count || 0;
   } catch {
     offspringCount = 0;
   }
@@ -377,7 +343,11 @@ export function getDepartureCost(did) {
   let totalStaked = 0;
   try {
     // Bond data is in-memory in bond-engine, but we can estimate from trust_scores
-    const trustScore = db.prepare('SELECT score FROM trust_scores WHERE agent_id = ? ORDER BY computed_at DESC LIMIT 1').get(did);
+    const trustResult = await query(
+      'SELECT score FROM trust_scores WHERE agent_id = $1 ORDER BY computed_at DESC LIMIT 1',
+      [did]
+    );
+    const trustScore = trustResult.rows[0];
     totalStaked = trustScore ? Math.round(trustScore.score * 10) : 0;
   } catch {
     totalStaked = 0;
@@ -407,19 +377,20 @@ export function startDecayEngine() {
 
   const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
 
-  decayInterval = setInterval(() => {
+  decayInterval = setInterval(async () => {
     try {
       console.log('[HiveTrust] Decay engine running...');
       const now = new Date();
 
       // 1. Departed agents: apply 50%/month decay
-      const departed = db.prepare(
+      const departedResult = await query(
         "SELECT did, composite_score, departed_at FROM reputation_scores WHERE is_active = 0 AND composite_score > 0.01"
-      ).all();
+      );
+      const departed = departedResult.rows;
 
       for (const agent of departed) {
         try {
-          applyDecay(agent.did, 'departure');
+          await applyDecay(agent.did, 'departure');
           console.log(`[Decay] Applied departure decay to ${agent.did}`);
         } catch (e) {
           console.error(`[Decay] Error decaying departed agent ${agent.did}:`, e.message);
@@ -428,16 +399,17 @@ export function startDecayEngine() {
 
       // 2. Inactive agents (>60 days no transactions): apply 10%/month decay
       const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString();
-      const inactive = db.prepare(`
+      const inactiveResult = await query(`
         SELECT did, composite_score, last_transaction_at FROM reputation_scores
         WHERE is_active = 1
           AND composite_score > 0.01
-          AND (last_transaction_at IS NULL OR last_transaction_at < ?)
-      `).all(sixtyDaysAgo);
+          AND (last_transaction_at IS NULL OR last_transaction_at < $1)
+      `, [sixtyDaysAgo]);
+      const inactive = inactiveResult.rows;
 
       for (const agent of inactive) {
         try {
-          applyDecay(agent.did, 'inactivity');
+          await applyDecay(agent.did, 'inactivity');
           console.log(`[Decay] Applied inactivity decay to ${agent.did}`);
         } catch (e) {
           console.error(`[Decay] Error decaying inactive agent ${agent.did}:`, e.message);
@@ -446,15 +418,16 @@ export function startDecayEngine() {
 
       // 3. Agents past 30-day grace: trigger memory revocation
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const pastGrace = db.prepare(`
+      const pastGraceResult = await query(`
         SELECT rs.did FROM reputation_scores rs
         WHERE rs.is_active = 0
           AND rs.departed_at IS NOT NULL
-          AND rs.departed_at < ?
+          AND rs.departed_at < $1
           AND NOT EXISTS (
             SELECT 1 FROM memory_revocations mr WHERE mr.did = rs.did
           )
-      `).all(thirtyDaysAgo);
+      `, [thirtyDaysAgo]);
+      const pastGrace = pastGraceResult.rows;
 
       for (const agent of pastGrace) {
         revokeMemory(agent.did, 'auto_decay_engine').catch(e => {

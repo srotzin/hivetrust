@@ -10,7 +10,7 @@
  */
 
 import { createHash, randomBytes } from 'crypto';
-import db from '../db.js';
+import { query } from '../db.js';
 
 // ─── Simpson Strong-Tie Product Catalog ─────────────────────
 // All loads ASD (Allowable Stress Design), CD=1.60, DF/SP unless noted.
@@ -59,21 +59,6 @@ const SIMPSON_CATALOG = {
 // Valid SDC categories
 const VALID_SDC = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-// ─── Prepared Statements ────────────────────────────────────
-
-const insertProof = db.prepare(`
-  INSERT INTO compliance_proofs (id, project_id, inspector_did, proof_type, proof_hash, inputs_json, result_json, compliant, created_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-`);
-
-const selectProofsByProject = db.prepare(`
-  SELECT * FROM compliance_proofs WHERE project_id = ? ORDER BY created_at DESC
-`);
-
-const selectProofByHash = db.prepare(`
-  SELECT * FROM compliance_proofs WHERE proof_hash = ?
-`);
-
 // ─── Core Functions ─────────────────────────────────────────
 
 /**
@@ -100,22 +85,25 @@ function generateComplianceProof(inputs, result) {
 /**
  * Store a compliance proof in the database for audit trail.
  */
-function storeProof({ projectId, inspectorDid, proofType, proofHash, inputs, result, compliant }) {
+async function storeProof({ projectId, inspectorDid, proofType, proofHash, inputs, result, compliant }) {
   const id = 'proof_' + randomBytes(8).toString('hex');
   try {
-    insertProof.run(
-      id,
-      projectId,
-      inspectorDid || null,
-      proofType,
-      proofHash,
-      JSON.stringify(inputs),
-      JSON.stringify(result),
-      compliant ? 1 : 0
+    await query(
+      'INSERT INTO compliance_proofs (id, project_id, inspector_did, proof_type, proof_hash, inputs_json, result_json, compliant, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW()::TEXT)',
+      [
+        id,
+        projectId,
+        inspectorDid || null,
+        proofType,
+        proofHash,
+        JSON.stringify(inputs),
+        JSON.stringify(result),
+        compliant ? 1 : 0,
+      ]
     );
   } catch (e) {
     // UNIQUE constraint on proof_hash — same inputs produce same proof, that's fine
-    if (!e.message.includes('UNIQUE')) throw e;
+    if (e.code !== '23505') throw e;
   }
   return id;
 }
@@ -123,7 +111,7 @@ function storeProof({ projectId, inspectorDid, proofType, proofHash, inputs, res
 /**
  * Verify a single product's compliance against structural code requirements.
  */
-export function verifyProductCompliance({ product_id, model_variant, required_load_lbs, load_type, sdc_category, code_section, project_id, inspector_did }) {
+export async function verifyProductCompliance({ product_id, model_variant, required_load_lbs, load_type, sdc_category, code_section, project_id, inspector_did }) {
   // Validate inputs
   if (!product_id) throw Object.assign(new Error('product_id is required'), { status: 400 });
   if (!required_load_lbs || required_load_lbs <= 0) throw Object.assign(new Error('required_load_lbs must be a positive number'), { status: 400 });
@@ -164,7 +152,7 @@ export function verifyProductCompliance({ product_id, model_variant, required_lo
 
   const proof = generateComplianceProof(inputs, result);
 
-  storeProof({
+  await storeProof({
     projectId: project_id,
     inspectorDid: inspector_did,
     proofType: 'product',
@@ -197,7 +185,7 @@ export function verifyProductCompliance({ product_id, model_variant, required_lo
 /**
  * Verify a Bill of Materials — every item validated against catalog.
  */
-export function verifyBOM({ bom_items, project_id, sdc_category, inspector_did }) {
+export async function verifyBOM({ bom_items, project_id, sdc_category, inspector_did }) {
   if (!Array.isArray(bom_items) || bom_items.length === 0) throw Object.assign(new Error('bom_items must be a non-empty array'), { status: 400 });
   if (!project_id) throw Object.assign(new Error('project_id is required'), { status: 400 });
   if (!sdc_category || !VALID_SDC.includes(sdc_category.toUpperCase())) throw Object.assign(new Error('sdc_category must be one of: A, B, C, D, E, F'), { status: 400 });
@@ -254,7 +242,7 @@ export function verifyBOM({ bom_items, project_id, sdc_category, inspector_did }
 
   const proof = generateComplianceProof(inputs, result);
 
-  storeProof({
+  await storeProof({
     projectId: project_id,
     inspectorDid: inspector_did,
     proofType: 'bom',
@@ -279,10 +267,10 @@ export function verifyBOM({ bom_items, project_id, sdc_category, inspector_did }
 /**
  * Retrieve all compliance proofs for a project (audit trail).
  */
-export function getAuditTrail(projectId) {
+export async function getAuditTrail(projectId) {
   if (!projectId) throw Object.assign(new Error('project_id is required'), { status: 400 });
 
-  const rows = selectProofsByProject.all(projectId);
+  const { rows } = await query('SELECT * FROM compliance_proofs WHERE project_id = $1 ORDER BY created_at DESC', [projectId]);
   return rows.map(row => ({
     id: row.id,
     project_id: row.project_id,
@@ -300,13 +288,14 @@ export function getAuditTrail(projectId) {
  * Issue a signed compliance certificate for a project.
  * Chains all provided proof hashes into a single certificate hash.
  */
-export function issueCertificate({ project_id, inspector_did, bom_hash, compliance_proofs }) {
+export async function issueCertificate({ project_id, inspector_did, bom_hash, compliance_proofs }) {
   if (!project_id) throw Object.assign(new Error('project_id is required'), { status: 400 });
   if (!Array.isArray(compliance_proofs) || compliance_proofs.length === 0) throw Object.assign(new Error('compliance_proofs must be a non-empty array of proof hashes'), { status: 400 });
 
   // Verify all referenced proofs exist
   for (const hash of compliance_proofs) {
-    const existing = selectProofByHash.get(hash);
+    const result = await query('SELECT * FROM compliance_proofs WHERE proof_hash = $1', [hash]);
+    const existing = result.rows[0];
     if (!existing) {
       throw Object.assign(new Error(`Proof hash not found: ${hash}`), { status: 404 });
     }
@@ -324,17 +313,17 @@ export function issueCertificate({ project_id, inspector_did, bom_hash, complian
   const certificateHash = createHash('sha256').update(chainInput).digest('hex');
 
   const inputs = { project_id, inspector_did: inspector_did || null, bom_hash: bom_hash || null, compliance_proofs };
-  const result = { certificate_id: certificateId, certificate_hash: certificateHash, issued_at: issuedAt, expires_at: expiresAt };
+  const certResult = { certificate_id: certificateId, certificate_hash: certificateHash, issued_at: issuedAt, expires_at: expiresAt };
 
-  const proof = generateComplianceProof(inputs, result);
+  const proof = generateComplianceProof(inputs, certResult);
 
-  storeProof({
+  await storeProof({
     projectId: project_id,
     inspectorDid: inspector_did,
     proofType: 'certificate',
     proofHash: proof.hash,
     inputs,
-    result,
+    result: certResult,
     compliant: true,
   });
 

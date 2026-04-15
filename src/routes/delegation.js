@@ -38,7 +38,7 @@ function err(res, message, status = 400) {
 router.post('/create', async (req, res) => {
   try {
     const { grantor_did, grantee_did, budget_usdc, scope, expires_at, restrictions } = req.body;
-    const delegation = createDelegation({ grantor_did, grantee_did, budget_usdc, scope, expires_at, restrictions });
+    const delegation = await createDelegation({ grantor_did, grantee_did, budget_usdc, scope, expires_at, restrictions });
     return ok(res, delegation, 201);
   } catch (e) {
     console.error('[POST /delegation/create]', e.message);
@@ -51,7 +51,7 @@ router.post('/create', async (req, res) => {
 router.post('/authorize-spend', async (req, res) => {
   try {
     const { delegation_id, amount_usdc, vendor, category, tx_description, compliance_proof_hash } = req.body;
-    const result = authorizeSpend({ delegation_id, amount_usdc, vendor, category, tx_description, compliance_proof_hash });
+    const result = await authorizeSpend({ delegation_id, amount_usdc, vendor, category, tx_description, compliance_proof_hash });
     return ok(res, result);
   } catch (e) {
     console.error('[POST /delegation/authorize-spend]', e.message);
@@ -64,7 +64,7 @@ router.post('/authorize-spend', async (req, res) => {
 router.post('/revoke', async (req, res) => {
   try {
     const { delegation_id, grantor_did, reason } = req.body;
-    const result = revokeDelegation({ delegation_id, grantor_did, reason });
+    const result = await revokeDelegation({ delegation_id, grantor_did, reason });
     return ok(res, result);
   } catch (e) {
     console.error('[POST /delegation/revoke]', e.message);
@@ -76,7 +76,7 @@ router.post('/revoke', async (req, res) => {
 
 router.get('/:delegation_id', async (req, res) => {
   try {
-    const delegation = getDelegation(req.params.delegation_id);
+    const delegation = await getDelegation(req.params.delegation_id);
     if (!delegation) return err(res, 'Delegation not found', 404);
     return ok(res, delegation);
   } catch (e) {
@@ -90,7 +90,7 @@ router.get('/:delegation_id', async (req, res) => {
 router.get('/agent/:did', async (req, res) => {
   try {
     const did = req.params.did;
-    const delegations = getDelegationsForAgent(did);
+    const delegations = await getDelegationsForAgent(did);
     return ok(res, delegations);
   } catch (e) {
     console.error('[GET /delegation/agent/:did]', e.message);
@@ -104,7 +104,7 @@ router.post('/audit', async (req, res) => {
   try {
     const { delegation_id } = req.body;
     if (!delegation_id) return err(res, 'delegation_id is required', 400);
-    const trail = getAuditTrail(delegation_id);
+    const trail = await getAuditTrail(delegation_id);
     return ok(res, trail);
   } catch (e) {
     console.error('[POST /delegation/audit]', e.message);

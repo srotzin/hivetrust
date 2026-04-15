@@ -13,7 +13,7 @@
  * since the last trust score computation.
  */
 
-import db from '../db.js';
+import { query, getClient } from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 import * as audit from './audit.js';
 
@@ -78,27 +78,21 @@ const EVENT_SCORE_IMPACT = {
  * @param {string}   [source]     - Source identifier for bulk attribution
  * @returns {{ success: boolean, ingested?: number, skipped?: number, recomputes?: string[], errors?: string[], error?: string }}
  */
-export function ingestEvents(events, source = 'api') {
+export async function ingestEvents(events, source = 'api') {
   try {
     if (!Array.isArray(events) || events.length === 0) {
       return { success: false, error: 'events must be a non-empty array' };
     }
 
-    const insert = db.prepare(`
-      INSERT INTO behavioral_events (
-        id, agent_id, event_type, source, source_platform,
-        action, outcome, counterparty_id, transaction_value,
-        score_impact, pillar_affected,
-        evidence, metadata, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', datetime('now'))
-    `);
+    const client = await getClient();
+    let ingested = [];
+    let errors = [];
+    const agentEventCounts = new Map();
 
-    const insertMany = db.transaction((evts) => {
-      const ingested = [];
-      const errors   = [];
-      const agentEventCounts = new Map();
+    try {
+      await client.query('BEGIN');
 
-      for (const evt of evts) {
+      for (const evt of events) {
         // Validate required fields
         if (!evt.agent_id) { errors.push('Missing agent_id'); continue; }
         if (!VALID_EVENT_TYPES.has(evt.event_type)) {
@@ -107,14 +101,21 @@ export function ingestEvents(events, source = 'api') {
         }
 
         // Verify agent exists
-        const agentExists = db.prepare('SELECT id FROM agents WHERE id = ?').get(evt.agent_id);
-        if (!agentExists) {
+        const agentCheck = await client.query('SELECT id FROM agents WHERE id = $1', [evt.agent_id]);
+        if (agentCheck.rows.length === 0) {
           errors.push(`Agent ${evt.agent_id} not found`);
           continue;
         }
 
         const id = uuidv4();
-        insert.run(
+        await client.query(`
+          INSERT INTO behavioral_events (
+            id, agent_id, event_type, source, source_platform,
+            action, outcome, counterparty_id, transaction_value,
+            score_impact, pillar_affected,
+            evidence, metadata, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, '{}', NOW()::TEXT)
+        `, [
           id,
           evt.agent_id,
           evt.event_type,
@@ -127,7 +128,7 @@ export function ingestEvents(events, source = 'api') {
           EVENT_SCORE_IMPACT[evt.event_type] ?? 0,
           EVENT_PILLAR_MAP[evt.event_type]   ?? 'behavior',
           JSON.stringify(evt.evidence || {})
-        );
+        ]);
 
         ingested.push({ id, agent_id: evt.agent_id, event_type: evt.event_type });
 
@@ -135,22 +136,25 @@ export function ingestEvents(events, source = 'api') {
         agentEventCounts.set(evt.agent_id, (agentEventCounts.get(evt.agent_id) || 0) + 1);
       }
 
-      return { ingested, errors, agentEventCounts };
-    });
-
-    const { ingested, errors, agentEventCounts } = insertMany(events);
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
 
     // Check which agents need score recomputation
     const recomputes = [];
     for (const [agentId, newCount] of agentEventCounts) {
-      if (shouldRecompute(agentId, newCount)) {
+      if (await shouldRecompute(agentId, newCount)) {
         recomputes.push(agentId);
         // Trigger async recompute (import lazily to avoid circular dep)
         triggerRecompute(agentId);
       }
     }
 
-    audit.log('system', 'system', 'telemetry.ingest', 'behavioral_events', 'bulk',
+    await audit.log('system', 'system', 'telemetry.ingest', 'behavioral_events', 'bulk',
       { count: ingested.length, source, recomputes: recomputes.length });
 
     return {
@@ -184,7 +188,7 @@ export function ingestEvents(events, source = 'api') {
  * @param {number}   [options.offset=0]
  * @returns {{ success: boolean, events?: object[], total?: number, error?: string }}
  */
-export function getEvents(agentId, options = {}) {
+export async function getEvents(agentId, options = {}) {
   try {
     const {
       eventType,
@@ -197,27 +201,30 @@ export function getEvents(agentId, options = {}) {
       offset = 0,
     } = options;
 
-    const conditions = ['agent_id = ?'];
+    let paramIdx = 1;
+    const conditions = [`agent_id = $${paramIdx++}`];
     const params     = [agentId];
 
-    if (eventType)       { conditions.push('event_type = ?');       params.push(eventType); }
-    if (outcome)         { conditions.push('outcome = ?');           params.push(outcome); }
-    if (counterpartyId)  { conditions.push('counterparty_id = ?');   params.push(counterpartyId); }
-    if (since)           { conditions.push('created_at >= ?');       params.push(since); }
-    if (until)           { conditions.push('created_at <= ?');       params.push(until); }
-    if (sourcePlatform)  { conditions.push('source_platform = ?');   params.push(sourcePlatform); }
+    if (eventType)       { conditions.push(`event_type = $${paramIdx++}`);       params.push(eventType); }
+    if (outcome)         { conditions.push(`outcome = $${paramIdx++}`);           params.push(outcome); }
+    if (counterpartyId)  { conditions.push(`counterparty_id = $${paramIdx++}`);   params.push(counterpartyId); }
+    if (since)           { conditions.push(`created_at >= $${paramIdx++}`);       params.push(since); }
+    if (until)           { conditions.push(`created_at <= $${paramIdx++}`);       params.push(until); }
+    if (sourcePlatform)  { conditions.push(`source_platform = $${paramIdx++}`);   params.push(sourcePlatform); }
 
     const where = `WHERE ${conditions.join(' AND ')}`;
 
-    const total = db.prepare(`SELECT COUNT(*) as n FROM behavioral_events ${where}`).get(...params).n;
-    const rows  = db.prepare(`
+    const countResult = await query(`SELECT COUNT(*) as n FROM behavioral_events ${where}`, params);
+    const total = countResult.rows[0].n;
+
+    const rowsResult = await query(`
       SELECT * FROM behavioral_events ${where}
-      ORDER BY created_at DESC LIMIT ? OFFSET ?
-    `).all(...params, limit, offset);
+      ORDER BY created_at DESC LIMIT $${paramIdx++} OFFSET $${paramIdx++}
+    `, [...params, limit, offset]);
 
     return {
       success: true,
-      events: rows.map(r => ({
+      events: rowsResult.rows.map(r => ({
         ...r,
         evidence: JSON.parse(r.evidence || '{}'),
         metadata: JSON.parse(r.metadata || '{}'),
@@ -233,9 +240,9 @@ export function getEvents(agentId, options = {}) {
 /**
  * Get aggregated event statistics for an agent.
  */
-export function getEventStats(agentId) {
+export async function getEventStats(agentId) {
   try {
-    const stats = db.prepare(`
+    const statsResult = await query(`
       SELECT
         event_type,
         COUNT(*) as count,
@@ -244,17 +251,17 @@ export function getEventStats(agentId) {
         SUM(CASE WHEN transaction_value > 0 THEN transaction_value ELSE 0 END) as total_value,
         SUM(score_impact) as total_score_impact
       FROM behavioral_events
-      WHERE agent_id = ?
+      WHERE agent_id = $1
       GROUP BY event_type
-    `).all(agentId);
+    `, [agentId]);
 
-    const totalEvents = db.prepare('SELECT COUNT(*) as n FROM behavioral_events WHERE agent_id = ?').get(agentId);
+    const totalResult = await query('SELECT COUNT(*) as n FROM behavioral_events WHERE agent_id = $1', [agentId]);
 
     return {
       success: true,
       agentId,
-      total_events: totalEvents.n,
-      by_type: stats,
+      total_events: totalResult.rows[0].n,
+      by_type: statsResult.rows,
     };
   } catch (err) {
     return { success: false, error: err.message };
@@ -267,21 +274,23 @@ export function getEventStats(agentId) {
  * Decide if we should trigger score recomputation for an agent.
  * Threshold: >= RECOMPUTE_THRESHOLD new events since last compute.
  */
-function shouldRecompute(agentId, newEventsCount) {
+async function shouldRecompute(agentId, newEventsCount) {
   if (newEventsCount < RECOMPUTE_THRESHOLD) {
     // Check total events since last score computation
-    const lastScore = db.prepare(`
-      SELECT computed_at FROM trust_scores WHERE agent_id = ? ORDER BY computed_at DESC LIMIT 1
-    `).get(agentId);
+    const lastScoreResult = await query(`
+      SELECT computed_at FROM trust_scores WHERE agent_id = $1 ORDER BY computed_at DESC LIMIT 1
+    `, [agentId]);
+
+    const lastScore = lastScoreResult.rows[0];
 
     if (!lastScore) return true; // No score yet — always compute
 
-    const eventsSince = db.prepare(`
+    const eventsSinceResult = await query(`
       SELECT COUNT(*) as n FROM behavioral_events
-      WHERE agent_id = ? AND created_at > ?
-    `).get(agentId, lastScore.computed_at).n;
+      WHERE agent_id = $1 AND created_at > $2
+    `, [agentId, lastScore.computed_at]);
 
-    return eventsSince >= RECOMPUTE_THRESHOLD;
+    return eventsSinceResult.rows[0].n >= RECOMPUTE_THRESHOLD;
   }
   return true;
 }
@@ -293,7 +302,7 @@ function shouldRecompute(agentId, newEventsCount) {
 async function triggerRecompute(agentId) {
   try {
     const { computeTrustScore } = await import('./trust-scoring.js');
-    computeTrustScore(agentId);
+    await computeTrustScore(agentId);
   } catch (err) {
     console.error(`[telemetry] Recompute trigger failed for ${agentId}:`, err.message);
   }

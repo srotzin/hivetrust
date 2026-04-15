@@ -9,7 +9,7 @@
  */
 
 import crypto from 'node:crypto';
-import db from '../db.js';
+import { query } from '../db.js';
 
 // ─── Cross-Service Configuration ────────────────────────────
 
@@ -18,46 +18,6 @@ const HIVEFORGE_URL = process.env.HIVEFORGE_URL || 'https://hiveforge.onrender.c
 const HIVE_INTERNAL_KEY = process.env.HIVETRUST_SERVICE_KEY || process.env.HIVE_INTERNAL_KEY || '';
 
 const PLATFORM_FEE_RATE = 0.15; // 15%
-
-// ─── Ensure Tables ──────────────────────────────────────────
-
-function ensureTables() {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS liquidation_listings (
-      listing_id TEXT PRIMARY KEY,
-      did TEXT NOT NULL,
-      asking_price_usdc REAL NOT NULL,
-      minimum_price_usdc REAL NOT NULL,
-      description TEXT,
-      include_memories INTEGER DEFAULT 1,
-      include_offspring INTEGER DEFAULT 1,
-      valuation_breakdown TEXT,
-      status TEXT DEFAULT 'active',
-      listed_at TEXT,
-      sold_at TEXT,
-      cancelled_at TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS liquidation_transactions (
-      transaction_id TEXT PRIMARY KEY,
-      listing_id TEXT NOT NULL,
-      seller_did TEXT NOT NULL,
-      buyer_did TEXT NOT NULL,
-      sale_price_usdc REAL NOT NULL,
-      platform_fee_usdc REAL NOT NULL,
-      seller_proceeds_usdc REAL NOT NULL,
-      assets_transferred TEXT,
-      completed_at TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_liquidation_listings_did ON liquidation_listings(did);
-    CREATE INDEX IF NOT EXISTS idx_liquidation_listings_status ON liquidation_listings(status);
-    CREATE INDEX IF NOT EXISTS idx_liquidation_transactions_seller ON liquidation_transactions(seller_did);
-    CREATE INDEX IF NOT EXISTS idx_liquidation_transactions_buyer ON liquidation_transactions(buyer_did);
-  `);
-}
-
-ensureTables();
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -95,9 +55,10 @@ async function fetchService(url, options = {}) {
 /**
  * Get reputation score for a DID from local DB.
  */
-function getReputationScore(did) {
+async function getReputationScore(did) {
   try {
-    const row = db.prepare('SELECT composite_score FROM reputation_scores WHERE did = ?').get(did);
+    const result = await query('SELECT composite_score FROM reputation_scores WHERE did = $1', [did]);
+    const row = result.rows[0];
     return row ? row.composite_score : 0;
   } catch {
     return 0;
@@ -131,8 +92,8 @@ async function getOffspringCount(did) {
  * Formula: (reputation_score × 10) + (memory_nodes × 5) + (offspring_count × 100)
  */
 async function calculateValuation(did) {
-  const reputationScore = getReputationScore(did);
-  const [memoryNodes, offspringCount] = await Promise.all([
+  const [reputationScore, memoryNodes, offspringCount] = await Promise.all([
+    getReputationScore(did),
     getMemoryNodeCount(did),
     getOffspringCount(did),
   ]);
@@ -167,10 +128,11 @@ export async function createListing({ did, asking_price_usdc, description, inclu
   }
 
   // Check for existing active listing
-  const existing = db.prepare(
-    "SELECT listing_id FROM liquidation_listings WHERE did = ? AND status = 'active'"
-  ).get(did);
-  if (existing) throwErr('DID already has an active listing');
+  const existingResult = await query(
+    "SELECT listing_id FROM liquidation_listings WHERE did = $1 AND status = 'active'",
+    [did]
+  );
+  if (existingResult.rows[0]) throwErr('DID already has an active listing');
 
   // Calculate minimum price
   const valuation = await calculateValuation(did);
@@ -183,10 +145,10 @@ export async function createListing({ did, asking_price_usdc, description, inclu
   const listingId = generateId('lst');
   const now = new Date().toISOString();
 
-  db.prepare(`
+  await query(`
     INSERT INTO liquidation_listings (listing_id, did, asking_price_usdc, minimum_price_usdc, description, include_memories, include_offspring, valuation_breakdown, status, listed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
-  `).run(
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', $9)
+  `, [
     listingId,
     did,
     asking_price_usdc,
@@ -196,7 +158,7 @@ export async function createListing({ did, asking_price_usdc, description, inclu
     include_offspring !== false ? 1 : 0,
     JSON.stringify(valuation.breakdown),
     now
-  );
+  ]);
 
   return {
     listing_id: listingId,
@@ -212,20 +174,21 @@ export async function createListing({ did, asking_price_usdc, description, inclu
 /**
  * Browse active listings with filters.
  */
-export function getListings({ min_price, max_price, min_reputation, species, sort_by, page, per_page }) {
+export async function getListings({ min_price, max_price, min_reputation, species, sort_by, page, per_page }) {
   const pageNum = Math.max(1, parseInt(page) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(per_page) || 20));
   const offset = (pageNum - 1) * limit;
 
+  let paramIdx = 1;
   let where = "WHERE l.status = 'active'";
   const params = [];
 
   if (min_price) {
-    where += ' AND l.asking_price_usdc >= ?';
+    where += ` AND l.asking_price_usdc >= $${paramIdx++}`;
     params.push(min_price);
   }
   if (max_price) {
-    where += ' AND l.asking_price_usdc <= ?';
+    where += ` AND l.asking_price_usdc <= $${paramIdx++}`;
     params.push(max_price);
   }
 
@@ -233,18 +196,21 @@ export function getListings({ min_price, max_price, min_reputation, species, sor
   if (sort_by === 'price') orderBy = 'ORDER BY l.asking_price_usdc ASC';
   if (sort_by === 'reputation') orderBy = 'ORDER BY l.minimum_price_usdc DESC';
 
-  const countRow = db.prepare(`SELECT COUNT(*) as total FROM liquidation_listings l ${where}`).get(...params);
-  const total = countRow?.total || 0;
+  const countResult = await query(
+    `SELECT COUNT(*) as total FROM liquidation_listings l ${where}`,
+    params
+  );
+  const total = parseInt(countResult.rows[0]?.total) || 0;
 
-  const listings = db.prepare(`
+  const listingsResult = await query(`
     SELECT l.* FROM liquidation_listings l
     ${where}
     ${orderBy}
-    LIMIT ? OFFSET ?
-  `).all(...params, limit, offset);
+    LIMIT $${paramIdx++} OFFSET $${paramIdx++}
+  `, [...params, limit, offset]);
 
   return {
-    listings: listings.map(l => ({
+    listings: listingsResult.rows.map(l => ({
       ...l,
       include_memories: !!l.include_memories,
       include_offspring: !!l.include_offspring,
@@ -259,14 +225,15 @@ export function getListings({ min_price, max_price, min_reputation, species, sor
 /**
  * Get detailed listing info.
  */
-export function getListing(listingId) {
+export async function getListing(listingId) {
   if (!listingId) throwErr('listing_id is required');
 
-  const listing = db.prepare('SELECT * FROM liquidation_listings WHERE listing_id = ?').get(listingId);
+  const result = await query('SELECT * FROM liquidation_listings WHERE listing_id = $1', [listingId]);
+  const listing = result.rows[0];
   if (!listing) throwErr('Listing not found', 404);
 
   // Get seller reputation
-  const repScore = getReputationScore(listing.did);
+  const repScore = await getReputationScore(listing.did);
 
   return {
     ...listing,
@@ -286,17 +253,21 @@ export async function valuateDid(did) {
   const valuation = await calculateValuation(did);
 
   // Get comparable sales (last 5 completed transactions)
-  const comparableSales = db.prepare(`
+  const comparableResult = await query(`
     SELECT sale_price_usdc, seller_did, buyer_did, completed_at
     FROM liquidation_transactions
     ORDER BY completed_at DESC
     LIMIT 5
-  `).all();
+  `, []);
 
   // Get bond value if any
   let bondValue = 0;
   try {
-    const trustScore = db.prepare('SELECT score FROM trust_scores WHERE agent_id = ? ORDER BY computed_at DESC LIMIT 1').get(did);
+    const trustResult = await query(
+      'SELECT score FROM trust_scores WHERE agent_id = $1 ORDER BY computed_at DESC LIMIT 1',
+      [did]
+    );
+    const trustScore = trustResult.rows[0];
     bondValue = trustScore ? Math.round(trustScore.score * 5) : 0;
   } catch {
     bondValue = 0;
@@ -309,7 +280,7 @@ export async function valuateDid(did) {
       ...valuation.breakdown,
       bond_value: bondValue,
     },
-    comparable_sales: comparableSales,
+    comparable_sales: comparableResult.rows,
   };
 }
 
@@ -321,9 +292,11 @@ export async function executePurchase({ listing_id, buyer_did, payment_method })
   if (!listing_id) throwErr('listing_id is required');
   if (!buyer_did) throwErr('buyer_did is required');
 
-  const listing = db.prepare(
-    "SELECT * FROM liquidation_listings WHERE listing_id = ? AND status = 'active'"
-  ).get(listing_id);
+  const listingResult = await query(
+    "SELECT * FROM liquidation_listings WHERE listing_id = $1 AND status = 'active'",
+    [listing_id]
+  );
+  const listing = listingResult.rows[0];
   if (!listing) throwErr('Listing not found or not active', 404);
 
   if (listing.did === buyer_did) throwErr('Buyer cannot be the same as seller');
@@ -336,12 +309,7 @@ export async function executePurchase({ listing_id, buyer_did, payment_method })
   let memoriesCount = 0;
   let offspringCount = 0;
 
-  try {
-    db.prepare('UPDATE reputation_scores SET did = ? WHERE did = ?')
-      .run(buyer_did, listing.did);
-  } catch {
-    // May not have reputation records
-  }
+  await query('UPDATE reputation_scores SET did = $1 WHERE did = $2', [buyer_did, listing.did]).catch(() => {});
 
   // Transfer memories if included
   if (listing.include_memories) {
@@ -371,7 +339,7 @@ export async function executePurchase({ listing_id, buyer_did, payment_method })
 
   const transactionId = generateId('txn');
   const now = new Date().toISOString();
-  const reputationScore = getReputationScore(buyer_did) || getReputationScore(listing.did);
+  const reputationScore = await getReputationScore(buyer_did) || await getReputationScore(listing.did);
 
   const assetsTransferred = {
     reputation_score: reputationScore,
@@ -380,14 +348,16 @@ export async function executePurchase({ listing_id, buyer_did, payment_method })
   };
 
   // Record transaction
-  db.prepare(`
+  await query(`
     INSERT INTO liquidation_transactions (transaction_id, listing_id, seller_did, buyer_did, sale_price_usdc, platform_fee_usdc, seller_proceeds_usdc, assets_transferred, completed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(transactionId, listing_id, listing.did, buyer_did, salePrice, platformFee, sellerProceeds, JSON.stringify(assetsTransferred), now);
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+  `, [transactionId, listing_id, listing.did, buyer_did, salePrice, platformFee, sellerProceeds, JSON.stringify(assetsTransferred), now]);
 
   // Update listing status
-  db.prepare("UPDATE liquidation_listings SET status = 'sold', sold_at = ? WHERE listing_id = ?")
-    .run(now, listing_id);
+  await query(
+    "UPDATE liquidation_listings SET status = 'sold', sold_at = $1 WHERE listing_id = $2",
+    [now, listing_id]
+  );
 
   return {
     transaction_id: transactionId,
@@ -405,18 +375,22 @@ export async function executePurchase({ listing_id, buyer_did, payment_method })
 /**
  * Cancel an active listing.
  */
-export function cancelListing(listingId, sellerDid) {
+export async function cancelListing(listingId, sellerDid) {
   if (!listingId) throwErr('listing_id is required');
 
-  const listing = db.prepare(
-    "SELECT * FROM liquidation_listings WHERE listing_id = ? AND status = 'active'"
-  ).get(listingId);
+  const result = await query(
+    "SELECT * FROM liquidation_listings WHERE listing_id = $1 AND status = 'active'",
+    [listingId]
+  );
+  const listing = result.rows[0];
   if (!listing) throwErr('Listing not found or not active', 404);
 
   const now = new Date().toISOString();
 
-  db.prepare("UPDATE liquidation_listings SET status = 'cancelled', cancelled_at = ? WHERE listing_id = ?")
-    .run(now, listingId);
+  await query(
+    "UPDATE liquidation_listings SET status = 'cancelled', cancelled_at = $1 WHERE listing_id = $2",
+    [now, listingId]
+  );
 
   return {
     listing_id: listingId,
@@ -428,62 +402,65 @@ export function cancelListing(listingId, sellerDid) {
 /**
  * Transaction history with filters.
  */
-export function getHistory({ did, from, to, limit: maxResults }) {
+export async function getHistory({ did, from, to, limit: maxResults }) {
   const resultLimit = Math.min(100, Math.max(1, parseInt(maxResults) || 50));
+  let paramIdx = 1;
   let where = 'WHERE 1=1';
   const params = [];
 
   if (did) {
-    where += ' AND (seller_did = ? OR buyer_did = ?)';
+    where += ` AND (seller_did = $${paramIdx++} OR buyer_did = $${paramIdx++})`;
     params.push(did, did);
   }
   if (from) {
-    where += ' AND completed_at >= ?';
+    where += ` AND completed_at >= $${paramIdx++}`;
     params.push(from);
   }
   if (to) {
-    where += ' AND completed_at <= ?';
+    where += ` AND completed_at <= $${paramIdx++}`;
     params.push(to);
   }
 
-  const transactions = db.prepare(`
+  const transactionsResult = await query(`
     SELECT * FROM liquidation_transactions
     ${where}
     ORDER BY completed_at DESC
-    LIMIT ?
-  `).all(...params, resultLimit);
+    LIMIT $${paramIdx++}
+  `, [...params, resultLimit]);
 
   // Calculate totals
-  const totals = db.prepare(`
+  const totalsResult = await query(`
     SELECT
       COALESCE(SUM(sale_price_usdc), 0) as total_volume,
       COALESCE(SUM(platform_fee_usdc), 0) as total_fees
     FROM liquidation_transactions
     ${where}
-  `).get(...params);
+  `, params);
+
+  const totals = totalsResult.rows[0];
 
   return {
-    transactions: transactions.map(t => ({
+    transactions: transactionsResult.rows.map(t => ({
       ...t,
       assets_transferred: t.assets_transferred ? JSON.parse(t.assets_transferred) : null,
     })),
-    total_volume_usdc: Math.round((totals?.total_volume || 0) * 100) / 100,
-    platform_fees_collected_usdc: Math.round((totals?.total_fees || 0) * 100) / 100,
+    total_volume_usdc: Math.round((parseFloat(totals?.total_volume) || 0) * 100) / 100,
+    platform_fees_collected_usdc: Math.round((parseFloat(totals?.total_fees) || 0) * 100) / 100,
   };
 }
 
 /**
  * Market-wide statistics.
  */
-export function getMarketStats() {
-  const listingStats = db.prepare(`
+export async function getMarketStats() {
+  const listingResult = await query(`
     SELECT
       COUNT(*) as total_listings,
       SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_listings
     FROM liquidation_listings
-  `).get();
+  `, []);
 
-  const txStats = db.prepare(`
+  const txResult = await query(`
     SELECT
       COUNT(*) as total_sales,
       COALESCE(SUM(sale_price_usdc), 0) as total_volume,
@@ -491,16 +468,19 @@ export function getMarketStats() {
       COALESCE(AVG(sale_price_usdc), 0) as avg_price,
       COALESCE(MAX(sale_price_usdc), 0) as highest_sale
     FROM liquidation_transactions
-  `).get();
+  `, []);
+
+  const listingStats = listingResult.rows[0];
+  const txStats = txResult.rows[0];
 
   return {
-    total_listings: listingStats?.total_listings || 0,
-    active_listings: listingStats?.active_listings || 0,
-    total_sales: txStats?.total_sales || 0,
-    total_volume_usdc: Math.round((txStats?.total_volume || 0) * 100) / 100,
-    total_fees_usdc: Math.round((txStats?.total_fees || 0) * 100) / 100,
-    avg_sale_price: Math.round((txStats?.avg_price || 0) * 100) / 100,
-    highest_sale: Math.round((txStats?.highest_sale || 0) * 100) / 100,
+    total_listings: parseInt(listingStats?.total_listings) || 0,
+    active_listings: parseInt(listingStats?.active_listings) || 0,
+    total_sales: parseInt(txStats?.total_sales) || 0,
+    total_volume_usdc: Math.round((parseFloat(txStats?.total_volume) || 0) * 100) / 100,
+    total_fees_usdc: Math.round((parseFloat(txStats?.total_fees) || 0) * 100) / 100,
+    avg_sale_price: Math.round((parseFloat(txStats?.avg_price) || 0) * 100) / 100,
+    highest_sale: Math.round((parseFloat(txStats?.highest_sale) || 0) * 100) / 100,
     trending_species: [],
   };
 }

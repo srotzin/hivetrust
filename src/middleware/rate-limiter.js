@@ -1,15 +1,15 @@
 /**
- * HiveTrust — Per-DID Rate Limiter with SQLite Persistence
+ * HiveTrust — Per-DID Rate Limiter with PostgreSQL Persistence
  *
  * Tiered limits:
  *   - Internal keys (['*'] scopes): 100,000 req/min
  *   - Authenticated DIDs / API keys: 1,000 req/min
  *   - Unauthenticated IPs: 100 req/min
  *
- * Uses SQLite rate_limits table for persistence with in-memory Map fallback.
+ * Uses PostgreSQL rate_limits table for persistence with in-memory Map fallback.
  */
 
-import db from '../db.js';
+import { query } from '../db.js';
 
 const WINDOW_MS = 60 * 1000; // 60-second window
 
@@ -24,9 +24,8 @@ const fallbackMap = new Map();
 // Periodic cleanup of expired windows (every 5 minutes)
 setInterval(() => {
   // Clean DB
-  try {
-    db.prepare("DELETE FROM rate_limits WHERE datetime(window_start) < datetime('now', '-2 minutes')").run();
-  } catch (_) { /* non-fatal */ }
+  query("DELETE FROM rate_limits WHERE window_start::TIMESTAMP < NOW() - INTERVAL '2 minutes'")
+    .catch(() => {});
 
   // Clean fallback map
   const now = Date.now();
@@ -74,21 +73,23 @@ function currentWindowStart() {
 }
 
 /**
- * Try to increment counter in SQLite. Returns { count, windowStart } or null on failure.
+ * Try to increment counter in PostgreSQL. Returns count or null on failure.
  */
-function incrementDb(key, windowStart) {
+async function incrementDb(key, windowStart) {
   try {
-    db.prepare(
+    await query(
       `INSERT INTO rate_limits (key, window_start, request_count)
-       VALUES (?, ?, 1)
-       ON CONFLICT(key, window_start) DO UPDATE SET request_count = request_count + 1`
-    ).run(key, windowStart);
+       VALUES ($1, $2, 1)
+       ON CONFLICT(key, window_start) DO UPDATE SET request_count = rate_limits.request_count + 1`,
+      [key, windowStart]
+    );
 
-    const row = db.prepare(
-      'SELECT request_count FROM rate_limits WHERE key = ? AND window_start = ?'
-    ).get(key, windowStart);
+    const result = await query(
+      'SELECT request_count FROM rate_limits WHERE key = $1 AND window_start = $2',
+      [key, windowStart]
+    );
 
-    return row ? row.request_count : 1;
+    return result.rows[0] ? result.rows[0].request_count : 1;
   } catch (err) {
     console.error('[rate-limiter] DB error, falling back to in-memory:', err.message);
     return null;
@@ -98,7 +99,7 @@ function incrementDb(key, windowStart) {
 /**
  * In-memory fallback counter.
  */
-function incrementFallback(key, limit) {
+function incrementFallback(key) {
   const now = Date.now();
   const entry = fallbackMap.get(key);
 
@@ -116,12 +117,12 @@ function incrementFallback(key, limit) {
  * @param {number} [limitOverride] - override the tiered limit
  */
 export function createRateLimiter(limitOverride) {
-  return function rateLimiter(req, res, next) {
+  return async function rateLimiter(req, res, next) {
     const { key, limit: tieredLimit } = resolveKeyAndLimit(req);
     const limit = limitOverride || tieredLimit;
 
     const windowStart = currentWindowStart();
-    let count = incrementDb(key, windowStart);
+    let count = await incrementDb(key, windowStart);
 
     let resetAt;
     if (count !== null) {
@@ -130,7 +131,7 @@ export function createRateLimiter(limitOverride) {
       resetAt = windowDate.getTime() + WINDOW_MS;
     } else {
       // Fallback to in-memory
-      const fallback = incrementFallback(key, limit);
+      const fallback = incrementFallback(key);
       count = fallback.count;
       resetAt = fallback.resetAt;
     }

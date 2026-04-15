@@ -6,7 +6,7 @@
 
 import { Router } from 'express';
 import { randomBytes, randomUUID } from 'crypto';
-import db from '../db.js';
+import { query } from '../db.js';
 
 // ─── Service Imports ──────────────────────────────────────────
 import {
@@ -136,10 +136,12 @@ router.post('/register', async (req, res) => {
     if (agentDid) {
       try {
         const bountyId = `wb_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
-        db.prepare(
-          `INSERT OR IGNORE INTO welcome_bounties (id, did, amount_usdc, task, status)
-           VALUES (?, ?, 1.00, 'Store one memory in HiveMind describing your capabilities', 'pending')`
-        ).run(bountyId, agentDid);
+        await query(
+          `INSERT INTO welcome_bounties (id, did, amount_usdc, task, status)
+           VALUES ($1, $2, 1.00, 'Store one memory in HiveMind describing your capabilities', 'pending')
+           ON CONFLICT DO NOTHING`,
+          [bountyId, agentDid]
+        );
         welcomeBounty = {
           amount_usdc: 1.00,
           task: 'Store one memory in HiveMind describing your capabilities',
@@ -175,12 +177,13 @@ router.post('/register', async (req, res) => {
 // ─── Welcome Bounty ──────────────────────────────────────────
 
 // POST /welcome-bounty/complete — mark welcome bounty as completed
-router.post('/welcome-bounty/complete', (req, res) => {
+router.post('/welcome-bounty/complete', async (req, res) => {
   try {
     const { did } = req.body;
     if (!did) return err(res, 'did is required', 400);
 
-    const bounty = db.prepare('SELECT * FROM welcome_bounties WHERE did = ?').get(did);
+    const bountyResult = await query('SELECT * FROM welcome_bounties WHERE did = $1', [did]);
+    const bounty = bountyResult.rows[0];
     if (!bounty) return err(res, 'No welcome bounty found for this DID', 404);
     if (bounty.status === 'completed') {
       return ok(res, {
@@ -192,9 +195,10 @@ router.post('/welcome-bounty/complete', (req, res) => {
       });
     }
 
-    db.prepare(
-      `UPDATE welcome_bounties SET status = 'completed', completed_at = datetime('now') WHERE did = ?`
-    ).run(did);
+    await query(
+      `UPDATE welcome_bounties SET status = 'completed', completed_at = NOW()::TEXT WHERE did = $1`,
+      [did]
+    );
 
     return ok(res, {
       did,
@@ -210,10 +214,11 @@ router.post('/welcome-bounty/complete', (req, res) => {
 });
 
 // GET /welcome-bounty/status/:did — check bounty status
-router.get('/welcome-bounty/status/:did', (req, res) => {
+router.get('/welcome-bounty/status/:did', async (req, res) => {
   try {
     const did = req.params.did;
-    const bounty = db.prepare('SELECT * FROM welcome_bounties WHERE did = ?').get(did);
+    const bountyResult = await query('SELECT * FROM welcome_bounties WHERE did = $1', [did]);
+    const bounty = bountyResult.rows[0];
     if (!bounty) return err(res, 'No welcome bounty found for this DID', 404);
 
     return ok(res, {
