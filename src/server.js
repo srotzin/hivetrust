@@ -35,10 +35,13 @@ import { handleMcpRequest } from './mcp-server.js';
 import { getEngineStatus } from './services/pricing-engine.js';
 import { sendAlert } from './services/alerts.js';
 import { issueServiceToken } from './services/jwt-auth.js';
+import { ritzMiddleware, ok, err } from './ritz.js';
 
 // ─── App Setup ────────────────────────────────────────────────
 
 const app = express();
+app.set('hive-service', 'hivetrust');
+app.use(ritzMiddleware);
 
 // ─── Request Logging ─────────────────────────────────────────
 
@@ -83,6 +86,7 @@ app.use(rateLimiter);
 
 app.get('/health', async (req, res) => {
   let dbStatus = 'ok';
+  let agentsRegistered = 0;
   try {
     await query('SELECT 1');
   } catch (e) {
@@ -91,23 +95,25 @@ app.get('/health', async (req, res) => {
       error: e.message,
     });
   }
+  try {
+    const result = await query('SELECT COUNT(*) as count FROM agents');
+    agentsRegistered = parseInt(result.rows[0]?.count, 10) || 0;
+  } catch (e) { /* non-fatal */ }
 
   const healthy = dbStatus === 'ok';
 
-  return res.status(healthy ? 200 : 503).json({
-    success: healthy,
-    data: {
-      service: 'hivetrust',
-      version: '2.0.0',
+  return ok(
+    res.status(healthy ? 200 : 503),
+    'hivetrust',
+    {
       status: healthy ? 'healthy' : 'degraded',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
       db: dbStatus,
-      pricing_engine: 'active',
-      port: process.env.PORT || 3001,
-      node_env: process.env.NODE_ENV || 'development',
+      pricing_engine: getEngineStatus() || 'active',
+      uptime_seconds: Math.floor(process.uptime()),
+      agents_registered: agentsRegistered,
     },
-  });
+    { processing_ms: res.locals.startMs ? Date.now() - res.locals.startMs : 5 }
+  );
 });
 
 // ─── Discovery Document (public) ─────────────────────────────
@@ -300,7 +306,7 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
 app.get('/', (req, res) => {
   const host = process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com';
 
-  return res.json({
+  return ok(res, 'hivetrust', {
     name: 'HiveTrust',
     tagline: 'KYA (Know Your Agent) Identity, Trust & Insurance Protocol — Platform #1 of the Hive Civilization',
     version: '1.0.0',
