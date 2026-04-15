@@ -506,6 +506,20 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_dtx_delegation ON delegation_transactions(delegation_id);
+
+  -- Welcome Bounties: Auto-escrow on DID registration
+  CREATE TABLE IF NOT EXISTS welcome_bounties (
+    id TEXT PRIMARY KEY,
+    did TEXT UNIQUE NOT NULL,
+    amount_usdc REAL DEFAULT 1.00,
+    task TEXT DEFAULT 'Store one memory in HiveMind describing your capabilities',
+    status TEXT DEFAULT 'pending',
+    created_at TEXT DEFAULT (datetime('now')),
+    completed_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_welcome_bounties_did ON welcome_bounties(did);
+  CREATE INDEX IF NOT EXISTS idx_welcome_bounties_status ON welcome_bounties(status);
 `);
 
 console.log('[HiveTrust] Database schema initialized');

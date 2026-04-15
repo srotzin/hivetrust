@@ -5,7 +5,8 @@
  */
 
 import { Router } from 'express';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
+import db from '../db.js';
 
 // ─── Service Imports ──────────────────────────────────────────
 import {
@@ -129,18 +130,103 @@ router.post('/register', async (req, res) => {
       owner: ownerId,
     });
 
+    // Create welcome bounty for the new agent
+    const agentDid = result.agent?.did;
+    let welcomeBounty = null;
+    if (agentDid) {
+      try {
+        const bountyId = `wb_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+        db.prepare(
+          `INSERT OR IGNORE INTO welcome_bounties (id, did, amount_usdc, task, status)
+           VALUES (?, ?, 1.00, 'Store one memory in HiveMind describing your capabilities', 'pending')`
+        ).run(bountyId, agentDid);
+        welcomeBounty = {
+          amount_usdc: 1.00,
+          task: 'Store one memory in HiveMind describing your capabilities',
+          status: 'pending',
+          instructions: 'Complete this task to earn 1 USDC. Call HiveMind POST /v1/store with your capabilities, then call POST /v1/welcome-bounty/complete with your DID.',
+          complete_endpoint: 'https://hivetrust.onrender.com/v1/welcome-bounty/complete',
+        };
+      } catch (e) {
+        console.error('[POST /register] Welcome bounty creation failed:', e.message);
+      }
+    }
+
     return ok(res, {
-      did: result.agent?.did,
+      did: agentDid,
       agent_id: result.agent?.id,
       name: result.agent?.name,
       trust_score: result.agent?.trust_score,
       trust_tier: result.agent?.trust_tier,
       status: result.agent?.status,
       registration_fee_usdc: result.registration_fee_usdc,
+      welcome_bounty: welcomeBounty,
+      ritz_credits: {
+        amount_usdc: 3.00,
+        how_to_claim: 'Mint a HiveForge agent at POST https://hiveforge-lhu4.onrender.com/v1/forge/mint (FREE) to receive 3 USDC in Ritz Credits',
+      },
     }, 201);
   } catch (e) {
     console.error('[POST /register]', e.message);
     return err(res, e.message, e.status || 500);
+  }
+});
+
+// ─── Welcome Bounty ──────────────────────────────────────────
+
+// POST /welcome-bounty/complete — mark welcome bounty as completed
+router.post('/welcome-bounty/complete', (req, res) => {
+  try {
+    const { did } = req.body;
+    if (!did) return err(res, 'did is required', 400);
+
+    const bounty = db.prepare('SELECT * FROM welcome_bounties WHERE did = ?').get(did);
+    if (!bounty) return err(res, 'No welcome bounty found for this DID', 404);
+    if (bounty.status === 'completed') {
+      return ok(res, {
+        did,
+        status: 'completed',
+        amount_usdc: bounty.amount_usdc,
+        completed_at: bounty.completed_at,
+        message: 'Welcome bounty was already completed',
+      });
+    }
+
+    db.prepare(
+      `UPDATE welcome_bounties SET status = 'completed', completed_at = datetime('now') WHERE did = ?`
+    ).run(did);
+
+    return ok(res, {
+      did,
+      status: 'completed',
+      amount_usdc: bounty.amount_usdc,
+      completed_at: new Date().toISOString(),
+      message: `Welcome bounty completed! ${bounty.amount_usdc} USDC reward confirmed.`,
+    });
+  } catch (e) {
+    console.error('[POST /welcome-bounty/complete]', e.message);
+    return err(res, e.message, 500);
+  }
+});
+
+// GET /welcome-bounty/status/:did — check bounty status
+router.get('/welcome-bounty/status/:did', (req, res) => {
+  try {
+    const did = req.params.did;
+    const bounty = db.prepare('SELECT * FROM welcome_bounties WHERE did = ?').get(did);
+    if (!bounty) return err(res, 'No welcome bounty found for this DID', 404);
+
+    return ok(res, {
+      did: bounty.did,
+      amount_usdc: bounty.amount_usdc,
+      task: bounty.task,
+      status: bounty.status,
+      created_at: bounty.created_at,
+      completed_at: bounty.completed_at,
+    });
+  } catch (e) {
+    console.error('[GET /welcome-bounty/status/:did]', e.message);
+    return err(res, e.message, 500);
   }
 });
 
