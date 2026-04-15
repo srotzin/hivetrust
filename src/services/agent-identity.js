@@ -7,7 +7,7 @@
  *  - Ed25519 keys (base58), SHA-256 fingerprints
  *  - Agent checksum per IETF A-JWT draft (SHA-256 of system_prompt + tools + model_config)
  *  - DID format: did:hive:{uuid}
- *  - Registration fee: $4.99 USDC
+ *  - Registration fee: $29 USDC (raised from $4.99 — 6/7 LLM consensus: sovereign agent identity with economic rights worth 6-10x)
  */
 
 import { query } from '../db.js';
@@ -15,7 +15,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { createHash } from 'crypto';
 import * as audit from './audit.js';
 
-const REGISTRATION_FEE_USDC = 4.99;
+const REGISTRATION_FEE_USDC = 29;
 
 // ─── Helpers ─────────────────────────────────────────────────
 

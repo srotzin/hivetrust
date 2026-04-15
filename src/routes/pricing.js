@@ -26,9 +26,10 @@ const USDC_CONTRACT = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
 
 // USDC subscription tiers
 const PLAN_TIERS = {
-  starter:    { usdc_monthly: 49,  calls: '1,000/month' },
-  builder:    { usdc_monthly: 199, calls: '10,000/month' },
-  enterprise: { usdc_monthly: 499, calls: 'Unlimited' },
+  citizen:     { usdc_onetime: 49,   calls: '100/day',       label: 'Citizen Pass' },
+  pro:         { usdc_monthly: 149,  calls: '10,000/month',  label: 'Pro Operator' },
+  enterprise:  { usdc_monthly: 999,  calls: 'Unlimited',     label: 'Enterprise Operator' },
+  fleet:       { usdc_monthly: 4999, calls: 'Unlimited+',    label: 'Fleet Commander' },
 };
 
 /**

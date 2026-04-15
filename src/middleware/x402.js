@@ -368,9 +368,10 @@ export default async function x402Middleware(req, res, next) {
       step_3: 'Retry this request — payment is verified on-chain automatically',
     },
     subscription_tiers: {
-      starter:    { usdc_monthly: 49,  calls: '1,000/month' },
-      builder:    { usdc_monthly: 199, calls: '10,000/month' },
-      enterprise: { usdc_monthly: 499, calls: 'Unlimited' },
+      citizen:     { usdc_onetime: 49,   calls: '100/day',       label: 'Citizen Pass' },
+      pro:         { usdc_monthly: 149,  calls: '10,000/month',  label: 'Pro Operator' },
+      enterprise:  { usdc_monthly: 999,  calls: 'Unlimited',     label: 'Enterprise Operator' },
+      fleet:       { usdc_monthly: 4999, calls: 'Unlimited+',    label: 'Fleet Commander' },
     },
   });
 }
