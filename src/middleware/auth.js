@@ -59,10 +59,14 @@ const PUBLIC_PREFIXES = [
   '/v1/stats',
   '/v1/pricing',
   '/v1/oracle/streams',
+  '/v1/trust/wallet-attestation',
+  '/v1/trust/zk-status',
   '/verify_agent_risk',
   '/stats',
   '/pricing',
   '/oracle/streams',
+  '/trust/wallet-attestation',
+  '/trust/zk-status',
 ];
 
 function hashKey(rawKey) {

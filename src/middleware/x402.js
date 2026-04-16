@@ -385,6 +385,7 @@ function isFreePath(path) {
   if (EXEMPT_ENDPOINTS.has(path)) return true;
   if (path.startsWith('/verify_agent_risk')) return true;
   if (path.startsWith('/pricing')) return true;
+  if (path === '/trust/wallet-attestation' || path === '/trust/zk-status') return true;
   if (ORACLE_FREE_PATHS.has(path)) return true;
   if (path.startsWith('/oracle/lease/') || path.startsWith('/oracle/leases/')) return true;
   if (BOND_FREE_PATHS.has(path)) return true;
