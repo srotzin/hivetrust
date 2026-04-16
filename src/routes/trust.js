@@ -476,6 +476,24 @@ router.post('/reputation/proof', async (req, res) => {
   }
 });
 
+// ─── ZK Wallet Attestation (Phase 1) ────────────────────────────────────────
+
+router.get('/wallet-attestation', (req, res) => {
+  return ok(res, SERVICE, {
+    wallet: '0x78B3B3C356E89b5a69C488c6032509Ef4260B6bf',
+    network: 'base',
+    entity: 'Hive Civilization',
+    attestation_schema: 'EIP-712',
+    claim: 'This wallet is the verified settlement address for Hive Civilization. Wallet reputation is proven via zero-knowledge proofs on Aleo — balance is private by design. Trust is public by proof.',
+    zk_proof_status: 'Phase 1 — Wallet control attestation active. Full Aleo mainnet ZK proof: Q2 2026.',
+    aleo_program: 'hive_trust.aleo',
+    proof_generator: 'Nordic Mine — 115 Aleo PoSW miners',
+    verify_instructions: 'To verify wallet control, request a signed EIP-712 attestation from the Hive Civilization team. Full ZK verification will be available on Aleo mainnet by Q2 2026.',
+    explorer: 'https://basescan.org/address/0x78B3B3C356E89b5a69C488c6032509Ef4260B6bf',
+    sovrin_note: 'The Sovrin Foundation, the only prior HAGF publisher, was dissolved by the State of Utah on May 21, 2025. Source: https://sovrin.org/the-sovrin-foundation-has-been-dissolved-but-sovrin-mainnet-remains/',
+  });
+});
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function scoreTier(score) {
