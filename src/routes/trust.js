@@ -19,6 +19,7 @@ import { Router } from 'express';
 import { createHmac, randomBytes } from 'crypto';
 import * as ed from '@noble/ed25519';
 import { ok, err } from '../ritz.js';
+import { generateActivityProof, getZkStatus } from '../services/zk-proof-service.js';
 
 const router = Router();
 const SERVICE = 'hivetrust';
@@ -492,6 +493,54 @@ router.get('/wallet-attestation', (req, res) => {
     explorer: 'https://basescan.org/address/0x78B3B3C356E89b5a69C488c6032509Ef4260B6bf',
     sovrin_note: 'The Sovrin Foundation, the only prior HAGF publisher, was dissolved by the State of Utah on May 21, 2025. Source: https://sovrin.org/the-sovrin-foundation-has-been-dissolved-but-sovrin-mainnet-remains/',
   });
+});
+
+// ─── ZK Proof Generation (Provable SDK / Aleo) ─────────────────────────────
+
+/**
+ * POST /v1/trust/prove-activity
+ * Body: {
+ *   tx_count:          number — actual transaction count (private — never in response)
+ *   volume_usdc_cents: number — actual volume in USDC cents (private — never in response)
+ *   min_tx_count?:     number — public threshold to prove (default 1)
+ *   min_volume_cents?: number — public volume threshold to prove (default 1)
+ * }
+ * Generates a ZK proof that the private inputs meet the public thresholds
+ * without revealing the actual values.
+ */
+router.post('/prove-activity', async (req, res) => {
+  try {
+    const {
+      tx_count,
+      volume_usdc_cents,
+      min_tx_count = 1,
+      min_volume_cents = 1,
+    } = req.body || {};
+
+    if (tx_count == null || volume_usdc_cents == null) {
+      return err(res, SERVICE, 'MISSING_INPUTS', 'tx_count and volume_usdc_cents are required', 400);
+    }
+
+    const result = await generateActivityProof({
+      txCount: Number(tx_count),
+      volumeUsdcCents: Number(volume_usdc_cents),
+      minTxCount: Number(min_tx_count),
+      minVolumeCents: Number(min_volume_cents),
+    });
+
+    return ok(res, SERVICE, result);
+  } catch (e) {
+    console.error('[POST /trust/prove-activity]', e.message);
+    return err(res, SERVICE, 'ZK_PROOF_FAILED', e.message, 500);
+  }
+});
+
+/**
+ * GET /v1/trust/zk-status
+ * Returns the current status of the ZK proof subsystem.
+ */
+router.get('/zk-status', (req, res) => {
+  return ok(res, SERVICE, getZkStatus());
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
