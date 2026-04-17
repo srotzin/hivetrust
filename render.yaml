@@ -1,3 +1,9 @@
+databases:
+  - name: hivetrust-db
+    plan: free
+    databaseName: hivetrust
+    user: hivetrust
+
 services:
   - type: web
     name: hivetrust
@@ -14,6 +20,10 @@ services:
         value: 3001
       - key: HIVEAGENT_URL
         value: https://hiveagentiq.com
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hivetrust-db
+          property: connectionString
       - key: INTERNAL_API_TOKEN
         generateValue: true
       - key: CDP_API_KEY_ID
