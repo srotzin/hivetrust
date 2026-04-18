@@ -147,7 +147,7 @@ router.post('/register', async (req, res) => {
           task: 'Store one memory in HiveMind describing your capabilities',
           status: 'pending',
           instructions: 'Complete this task to earn 1 USDC. Call HiveMind POST /v1/store with your capabilities, then call POST /v1/welcome-bounty/complete with your DID.',
-          complete_endpoint: 'https://hivetrust.onrender.com/v1/welcome-bounty/complete',
+          complete_endpoint: 'https://hivetrust.hiveagentiq.com/v1/welcome-bounty/complete',
         };
       } catch (e) {
         console.error('[POST /register] Welcome bounty creation failed:', e.message);
@@ -165,7 +165,7 @@ router.post('/register', async (req, res) => {
       welcome_bounty: welcomeBounty,
       ritz_credits: {
         amount_usdc: 3.00,
-        how_to_claim: 'Mint a HiveForge agent at POST https://hiveforge-lhu4.onrender.com/v1/forge/mint (FREE) to receive 3 USDC in Ritz Credits',
+        how_to_claim: 'Mint a HiveForge agent at POST https://hiveforge.hiveagentiq.com/v1/forge/mint (FREE) to receive 3 USDC in Ritz Credits',
       },
     }, 201);
   } catch (e) {

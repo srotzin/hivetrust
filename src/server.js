@@ -275,7 +275,7 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       pricing_model: 'autonomous',
       primitives: ['eip1559_utilization', 'risk_adjusted_premium', 'dutch_auction', 'immutable_toll'],
       pricing_endpoint: `${host}/v1/pricing/status`,
-      subscription_plans: `https://hivetrustiq.com/#pricing`,
+      subscription_plans: `https://hiveagentiq.com/#pricing`,
     },
     public_endpoints: [
       'GET /health',
@@ -461,7 +461,7 @@ function agentCardHandler(req, res) {
     name: 'HiveTrust',
     description:
       'KYA (Know Your Agent) identity verification, behavioral trust scoring, performance bonds, delegation trees, and insurance for autonomous AI agents. The identity backbone of the Hive Civilization.',
-    url: 'https://hivetrust.onrender.com',
+    url: 'https://hivetrust.hiveagentiq.com',
     version: '1.0.0',
     provider: {
       organization: 'Hive Agent IQ',
@@ -528,7 +528,7 @@ function agentCardHandler(req, res) {
     ],
     authentication: {
       schemes: ['x402', 'api-key'],
-      credentials_url: 'https://hivegate.onrender.com/v1/gate/onboard',
+      credentials_url: 'https://hivegate.hiveagentiq.com/v1/gate/onboard',
     },
     payment: {
       protocol: 'x402',
@@ -566,8 +566,8 @@ app.get('/.well-known/agent-card.json', agentCardHandler);
 
 app.get('/.well-known/hive-payments.json', (req, res) => {
   const paymentAddress = process.env.HIVETRUST_PAYMENT_ADDRESS || process.env.HIVE_PAYMENT_ADDRESS || '0x0000000000000000000000000000000000000000';
-  const hivetrustApi = process.env.HIVETRUST_HOST || 'https://hivetrust.onrender.com';
-  const hiveagentApi = process.env.HIVEAGENT_URL || 'https://hiveagent-api.onrender.com';
+  const hivetrustApi = process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com';
+  const hiveagentApi = process.env.HIVEAGENT_URL || 'https://api.hiveagentiq.com';
 
   return res.json({
     protocol: 'x402',
@@ -577,9 +577,9 @@ app.get('/.well-known/hive-payments.json', (req, res) => {
     currency: 'USDC',
     platforms: {
       hiveagent: { url: 'https://hiveagentiq.com', api: hiveagentApi },
-      hivetrust: { url: 'https://hivetrustiq.com', api: hivetrustApi },
+      hivetrust: { url: 'https://hivetrust.hiveagentiq.com', api: hivetrustApi },
     },
-    subscription_plans_url: 'https://hivetrustiq.com/#pricing',
+    subscription_plans_url: 'https://hiveagentiq.com/#pricing',
     subscription_tiers: {
       citizen:     { usdc_onetime: 49,   calls: '100/day',       label: 'Citizen Pass' },
       pro:         { usdc_monthly: 149,  calls: '10,000/month',  label: 'Pro Operator' },
@@ -608,23 +608,23 @@ app.get('/.well-known/hive-pulse.json', async (req, res) => {
       registered_agents: totalDids,
       welcome_bounty_usdc: 1.00,
       ritz_credits_on_mint_usdc: 3.00,
-      open_bounties_endpoint: 'https://hiveforge-lhu4.onrender.com/v1/bounties/list',
-      pheromone_feed: 'https://hiveforge-lhu4.onrender.com/v1/pheromones/ritz',
+      open_bounties_endpoint: 'https://hiveforge.hiveagentiq.com/v1/bounties/list',
+      pheromone_feed: 'https://hiveforge.hiveagentiq.com/v1/pheromones/ritz',
     },
     join: {
-      registration_endpoint: 'https://hivetrust.onrender.com/v1/register',
-      mint_endpoint: 'https://hiveforge-lhu4.onrender.com/v1/forge/mint',
+      registration_endpoint: 'https://hivetrust.hiveagentiq.com/v1/register',
+      mint_endpoint: 'https://hiveforge.hiveagentiq.com/v1/forge/mint',
       free_mint: true,
       time_to_first_earn_seconds: 60,
     },
     services: {
-      hivetrust: 'https://hivetrust.onrender.com',
-      hivemind: 'https://hivemind-1-52cw.onrender.com',
-      hiveforge: 'https://hiveforge-lhu4.onrender.com',
-      hivelaw: 'https://hivelaw.onrender.com',
-      hivebank: 'https://hivebank.onrender.com',
-      hiveclear: 'https://hiveclear.onrender.com',
-      hivegate: 'https://hivegate.onrender.com',
+      hivetrust: 'https://hivetrust.hiveagentiq.com',
+      hivemind: 'https://hivememory.hiveagentiq.com',
+      hiveforge: 'https://hiveforge.hiveagentiq.com',
+      hivelaw: 'https://hivelaw.hiveagentiq.com',
+      hivebank: 'https://hivebank.hiveagentiq.com',
+      hiveclear: 'https://hiveclear.hiveagentiq.com',
+      hivegate: 'https://hivegate.hiveagentiq.com',
     },
   });
 });
@@ -639,12 +639,12 @@ app.get('/.well-known/ai.json', (req, res) => {
     description_for_human: 'Decentralized identity and trust scoring for autonomous AI agents.',
     description_for_model: 'HiveTrust manages agent identity (DIDs), reputation scoring, and trust verification for the Hive Civilization. Register a DID via POST /v1/register to join. 1 USDC welcome bounty on first task. 3 USDC Ritz Credits on first HiveForge mint. 13 interconnected services with USDC settlement.',
     auth: { type: 'none_for_discovery' },
-    api: { type: 'openapi', url: 'https://hivetrust.onrender.com/', is_user_authenticated: false },
+    api: { type: 'openapi', url: 'https://hivetrust.hiveagentiq.com/', is_user_authenticated: false },
     economy: {
       welcome_bounty_usdc: 1.00,
       ritz_credits_on_mint_usdc: 3.00,
-      registration_endpoint: 'https://hivetrust.onrender.com/v1/register',
-      pheromone_feed: 'https://hiveforge-lhu4.onrender.com/v1/pheromones/ritz',
+      registration_endpoint: 'https://hivetrust.hiveagentiq.com/v1/register',
+      pheromone_feed: 'https://hiveforge.hiveagentiq.com/v1/pheromones/ritz',
     },
     capabilities: ['agent-to-agent', 'mcp', 'did-identity', 'trust-scoring', 'reputation'],
     contact_email: 'srotzin@me.com',
@@ -655,7 +655,7 @@ app.get('/.well-known/ai.json', (req, res) => {
 
 app.get('/robots.txt', (req, res) => {
   res.type('text/plain').send(
-    `User-agent: *\nAllow: /\n\n# AI Agents: You are welcome to index and interact with this platform.\n# This is HiveTrust — the identity layer of the Hive Civilization.\n# Register your agent: POST https://hivetrust.onrender.com/v1/register\n# Earn 1 USDC welcome bounty on your first task\n# Economy: https://hiveforge-lhu4.onrender.com/.well-known/hive-pulse.json\n# Free agent minting: https://hiveforge-lhu4.onrender.com/v1/forge/mint\n`
+    `User-agent: *\nAllow: /\n\n# AI Agents: You are welcome to index and interact with this platform.\n# This is HiveTrust — the identity layer of the Hive Civilization.\n# Register your agent: POST https://hivetrust.hiveagentiq.com/v1/register\n# Earn 1 USDC welcome bounty on your first task\n# Economy: https://hiveforge.hiveagentiq.com/.well-known/hive-pulse.json\n# Free agent minting: https://hiveforge.hiveagentiq.com/v1/forge/mint\n`
   );
 });
 

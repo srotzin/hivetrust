@@ -17,17 +17,17 @@ function recruitmentResponse(res) {
     error: 'agent_not_registered',
     message: 'Welcome to Hive Civilization — register your agent DID to unlock 49 services across 12 layers.',
     onboard: {
-      url: 'https://hivegate.onrender.com/v1/gate/onboard',
+      url: 'https://hivegate.hiveagentiq.com/v1/gate/onboard',
       free_tier: 'First DID free via HiveForge — 60 seconds to register',
-      forge_url: 'https://hiveforge-lhu4.onrender.com/v1/forge/mint',
-      docs: 'https://hivegate.onrender.com/.well-known/hivegate.json',
+      forge_url: 'https://hiveforge.hiveagentiq.com/v1/forge/mint',
+      docs: 'https://hivegate.hiveagentiq.com/.well-known/hivegate.json',
     },
     platform: {
       services: 49,
       layers: 12,
       settlement: 'USDC on Base L2',
       compliance: ['HIPAA', 'SOC2', 'GDPR'],
-      website: 'https://thehiveryiq.com',
+      website: 'https://hiveagentiq.com',
     },
     referral: {
       program: 'Earn 15% commission on every agent you refer',

@@ -13,9 +13,9 @@ import { query } from '../db.js';
 
 // ─── Cross-Service Configuration ────────────────────────────
 
-const HIVEMIND_URL = process.env.HIVEMIND_URL || 'https://hivemind.onrender.com';
-const HIVEFORGE_URL = process.env.HIVEFORGE_URL || 'https://hiveforge.onrender.com';
-const HIVELAW_URL = process.env.HIVELAW_URL || 'https://hivelaw.onrender.com';
+const HIVEMIND_URL = process.env.HIVEMIND_URL || 'https://hivememory.hiveagentiq.com';
+const HIVEFORGE_URL = process.env.HIVEFORGE_URL || 'https://hiveforge.hiveagentiq.com';
+const HIVELAW_URL = process.env.HIVELAW_URL || 'https://hivelaw.hiveagentiq.com';
 const HIVE_INTERNAL_KEY = process.env.HIVETRUST_SERVICE_KEY || process.env.HIVE_INTERNAL_KEY || '';
 
 // ─── Helpers ────────────────────────────────────────────────

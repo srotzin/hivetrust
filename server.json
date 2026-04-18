@@ -7,7 +7,7 @@
   "websiteUrl": "https://www.hiveagentiq.com",
   "remotes": [
     {
-      "url": "https://hivetrust.onrender.com/mcp",
+      "url": "https://hivetrust.hiveagentiq.com/mcp",
       "type": "streamable-http"
     }
   ],

@@ -40,7 +40,7 @@ export function err(res, service, code, message, httpCode = 400, extra = {}) {
     error: {
       code,
       message,
-      docs: `https://thehiveryiq.com/docs/errors/${code}`,
+      docs: `https://hiveagentiq.com/docs/errors/${code}`,
       ...extra,
     },
   });

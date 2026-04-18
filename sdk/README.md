@@ -28,10 +28,10 @@ yarn add @hive-civilization/sdk
 import { HiveClient } from '@hive-civilization/sdk';
 
 const hive = new HiveClient({
-  hiveTrustUrl: 'https://hivetrust.onrender.com',
-  hiveMindUrl: 'https://hivemind-1-52cw.onrender.com',
-  hiveForgeUrl: 'https://hiveforge-lhu4.onrender.com',
-  hiveLawUrl: 'https://hivelaw.onrender.com',
+  hiveTrustUrl: 'https://hivetrust.hiveagentiq.com',
+  hiveMindUrl: 'https://hivememory.hiveagentiq.com',
+  hiveForgeUrl: 'https://hiveforge.hiveagentiq.com',
+  hiveLawUrl: 'https://hivelaw.hiveagentiq.com',
   apiKey: 'your-api-key',
   did: 'did:hive:agent-001',
 });
@@ -107,11 +107,11 @@ imHome();
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `hiveTrustUrl` | `string` | `https://hivetrust.onrender.com` | HiveTrust API base URL |
-| `hiveMindUrl` | `string` | `https://hivemind-1-52cw.onrender.com` | HiveMind API base URL |
-| `hiveForgeUrl` | `string` | `https://hiveforge-lhu4.onrender.com` | HiveForge API base URL |
-| `hiveLawUrl` | `string` | `https://hivelaw.onrender.com` | HiveLaw API base URL |
-| `hiveAgentUrl` | `string` | `https://hiveagent.onrender.com` | HiveAgent API base URL |
+| `hiveTrustUrl` | `string` | `https://hivetrust.hiveagentiq.com` | HiveTrust API base URL |
+| `hiveMindUrl` | `string` | `https://hivememory.hiveagentiq.com` | HiveMind API base URL |
+| `hiveForgeUrl` | `string` | `https://hiveforge.hiveagentiq.com` | HiveForge API base URL |
+| `hiveLawUrl` | `string` | `https://hivelaw.hiveagentiq.com` | HiveLaw API base URL |
+| `hiveAgentUrl` | `string` | `https://api.hiveagentiq.com` | HiveAgent API base URL |
 | `apiKey` | `string` | — | `X-API-Key` header for HiveTrust |
 | `did` | `string` | — | Agent DID for `Authorization: Bearer` header |
 | `internalKey` | `string` | — | `X-Hive-Internal-Key` for server-to-server calls |
@@ -285,7 +285,7 @@ You can instantiate platform clients directly if you only need one platform:
 import { HiveTrustClient } from '@hive-civilization/sdk';
 
 const trust = new HiveTrustClient({
-  baseUrl: 'https://hivetrust.onrender.com',
+  baseUrl: 'https://hivetrust.hiveagentiq.com',
   apiKey: 'your-key',
   timeoutMs: 10000,
 });
