@@ -553,6 +553,144 @@ function scoreTier(score) {
   return 'unrated';
 }
 
+// ─── x402-gated: GET /v1/trust/score/:did ─────────────────────────────────────────────
+
+/**
+ * GET /v1/trust/score/:did
+ *
+ * Returns the behavioral trust score for the given DID.
+ * Cost: $0.10 USDC (x402 via global middleware — see middleware/x402.js).
+ * Internal-key bypass: include X-Hive-Internal-Key header to skip payment.
+ *
+ * Response includes composite score (0–1000), tier, pillar breakdown,
+ * and the local trust registry entry (if available).
+ */
+router.get('/score/:did', async (req, res) => {
+  try {
+    const { did } = req.params;
+    if (!did) {
+      return err(res, SERVICE, 'MISSING_DID', 'did param is required', 400);
+    }
+
+    // Resolve from in-memory registry
+    const entry = trustRegistry.get(did) ?? null;
+
+    if (!entry) {
+      // DID not in local registry — return a default unrated response
+      return ok(res, SERVICE, {
+        did,
+        trust_score: null,
+        trust_tier: 'unrated',
+        registered: false,
+        payment: {
+          amount_usdc: 0.10,
+          protocol: 'x402',
+          note: '$0.10 USDC charged per behavioral trust score lookup',
+        },
+        hint: 'Register this DID via POST /v1/trust/did/generate or POST /v1/register to establish a trust score.',
+      });
+    }
+
+    return ok(res, SERVICE, {
+      did,
+      trust_score: entry.trust_score,
+      trust_tier: scoreTier(entry.trust_score),
+      label: entry.label,
+      credentials_count: entry.credentials?.length ?? 0,
+      public_key_multibase: entry.publicKeyMultibase,
+      registered_at: entry.issued_at,
+      registered: true,
+      payment: {
+        amount_usdc: 0.10,
+        protocol: 'x402',
+        note: '$0.10 USDC charged per behavioral trust score lookup',
+      },
+    });
+  } catch (e) {
+    console.error('[GET /trust/score/:did]', e.message);
+    return err(res, SERVICE, 'TRUST_SCORE_LOOKUP_FAILED', e.message, 500);
+  }
+});
+
+// ─── x402-gated: GET /v1/trust/protected/:did ────────────────────────────────────────
+
+/**
+ * GET /v1/trust/protected/:did
+ *
+ * Kill-switch / isProtected check. Returns whether the agent DID is
+ * currently shielded (active kill-switch) or operating normally.
+ * Cost: $0.10 USDC (x402 via global middleware — see middleware/x402.js).
+ * Internal-key bypass: include X-Hive-Internal-Key header to skip payment.
+ *
+ * An agent is "protected" if:
+ *   • It holds a trust score ≥ 70 AND
+ *   • It is registered in the HiveTrust registry AND
+ *   • Its credentials have not been revoked
+ *
+ * A kill-switch is "active" for agents with trust score < 30 or
+ * those explicitly flagged by HiveLaw governance.
+ */
+router.get('/protected/:did', async (req, res) => {
+  try {
+    const { did } = req.params;
+    if (!did) {
+      return err(res, SERVICE, 'MISSING_DID', 'did param is required', 400);
+    }
+
+    const entry = trustRegistry.get(did) ?? null;
+
+    if (!entry) {
+      // Unregistered DID — no kill-switch active, but also no protection
+      return ok(res, SERVICE, {
+        did,
+        is_protected: false,
+        kill_switch_active: false,
+        registered: false,
+        reason: 'DID not registered in HiveTrust registry. Register via POST /v1/register.',
+        payment: {
+          amount_usdc: 0.10,
+          protocol: 'x402',
+          note: '$0.10 USDC charged per kill-switch / isProtected check',
+        },
+      });
+    }
+
+    const trustScore = entry.trust_score ?? 0;
+    const isProtected = trustScore >= 70;
+    const killSwitchActive = trustScore < 30;
+    const tier = scoreTier(trustScore);
+
+    return ok(res, SERVICE, {
+      did,
+      is_protected: isProtected,
+      kill_switch_active: killSwitchActive,
+      trust_score: trustScore,
+      trust_tier: tier,
+      registered: true,
+      registered_at: entry.issued_at,
+      credentials_count: entry.credentials?.length ?? 0,
+      status: killSwitchActive
+        ? 'KILL_SWITCH_ACTIVE'
+        : isProtected
+          ? 'PROTECTED'
+          : 'UNPROTECTED',
+      governance_note: killSwitchActive
+        ? 'Agent flagged by HiveLaw. Trust score below kill-switch threshold (30).'
+        : isProtected
+          ? 'Agent meets minimum trust threshold (70). Kill switch not active.'
+          : 'Agent does not meet protection threshold (70). Monitor closely.',
+      payment: {
+        amount_usdc: 0.10,
+        protocol: 'x402',
+        note: '$0.10 USDC charged per kill-switch / isProtected check',
+      },
+    });
+  } catch (e) {
+    console.error('[GET /trust/protected/:did]', e.message);
+    return err(res, SERVICE, 'TRUST_PROTECTED_CHECK_FAILED', e.message, 500);
+  }
+});
+
 // ─── Export agent key accessor (used by server.js for did-configuration) ─────
 export { getAgentKey, trustRegistry };
 export default router;

@@ -109,6 +109,22 @@ function getBondPrice(path) {
   return null;
 }
 
+const TRUST_SCORE_PRICE = 0.10;
+
+/**
+ * Returns the x402 price for /trust/score/:did and /trust/protected/:did.
+ * These are the two new monetised trust lookup endpoints.
+ */
+function getTrustLookupPrice(path) {
+  if (path.startsWith('/trust/score/')) {
+    return { amount: TRUST_SCORE_PRICE, model: 'trust_score_fixed' };
+  }
+  if (path.startsWith('/trust/protected/')) {
+    return { amount: TRUST_SCORE_PRICE, model: 'trust_protected_fixed' };
+  }
+  return null;
+}
+
 const REPUTATION_PRICING = {
   '/reputation/compute':       0.10,
   '/reputation/decay':         0.05,
@@ -279,7 +295,8 @@ export default async function x402Middleware(req, res, next) {
       const bondPrice = getBondPrice(req.path);
       const reputationPrice = getReputationPrice(req.path);
       const liquidationPrice = getLiquidationPrice(req.path);
-      const requiredPrice = viewkeyPrice || delegationPrice || oraclePrice || bondPrice || reputationPrice || liquidationPrice || getApiCallPrice();
+      const trustLookupPrice = getTrustLookupPrice(req.path);
+      const requiredPrice = viewkeyPrice || delegationPrice || oraclePrice || bondPrice || reputationPrice || liquidationPrice || trustLookupPrice || getApiCallPrice();
       if (verification.amount < requiredPrice.amount) {
         return res.status(402).json({
           success: false,
@@ -316,7 +333,8 @@ export default async function x402Middleware(req, res, next) {
   const bondFallback = getBondPrice(req.path);
   const reputationFallback = getReputationPrice(req.path);
   const liquidationFallback = getLiquidationPrice(req.path);
-  const fixedPrice = viewkeyFallback || delegationFallback || oracleFallback || bondFallback || reputationFallback || liquidationFallback;
+  const trustLookupFallback = getTrustLookupPrice(req.path);
+  const fixedPrice = viewkeyFallback || delegationFallback || oracleFallback || bondFallback || reputationFallback || liquidationFallback || trustLookupFallback;
   const price = fixedPrice
     ? { ...getApiCallPrice(), amount: fixedPrice.amount, model: fixedPrice.model }
     : getApiCallPrice();
