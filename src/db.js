@@ -39,6 +39,9 @@ pool.on('error', (err) => {
 // ─── Schema ──────────────────────────────────────────────────
 
 const SCHEMA_SQL = `
+  -- Enable pgcrypto extension for gen_random_bytes() used in DEFAULT clauses
+  CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
   -- Agent Registry: The canonical identity record for every agent
   CREATE TABLE IF NOT EXISTS agents (
     id TEXT PRIMARY KEY,
