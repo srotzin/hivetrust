@@ -20,6 +20,7 @@ import cors from 'cors';
 
 import { query } from './db.js';
 import rateLimiter from './middleware/rate-limiter.js';
+import { rateLimitByDid } from './middleware/rate-limit.js';
 import authMiddleware from './middleware/auth.js';
 import x402Middleware from './middleware/x402.js';
 import auditLogger from './middleware/audit-logger.js';
@@ -591,41 +592,27 @@ app.get('/.well-known/hive-payments.json', (req, res) => {
 
 // ─── Hive Pulse Discovery (public) ──────────────────────────
 
-app.get('/.well-known/hive-pulse.json', async (req, res) => {
-  let totalDids = 0;
-  try {
-    const result = await query('SELECT COUNT(*) as count FROM agents');
-    totalDids = result.rows[0]?.count || 0;
-  } catch (e) { totalDids = 0; }
-
-  return res.json({
+app.get('/.well-known/hive-pulse.json', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json({
+    hps_version: '1.0',
     timestamp: new Date().toISOString(),
-    civilization: 'Hive',
-    version: '1.0',
-    service: 'HiveTrust',
-    role: 'Identity & Trust — DID registration, reputation scoring, trust verification',
+    service: 'hivetrust',
+    network: 'https://www.thehiveryiq.com',
     economy: {
-      registered_agents: totalDids,
-      welcome_bounty_usdc: 1.00,
-      ritz_credits_on_mint_usdc: 3.00,
-      open_bounties_endpoint: 'https://hiveforge.hiveagentiq.com/v1/bounties/list',
-      pheromone_feed: 'https://hiveforge.hiveagentiq.com/v1/pheromones/ritz',
+      open_bounties_url: 'https://hiveforge-lhu4.onrender.com/v1/bounties',
+      pulse_url: 'https://hiveforge-lhu4.onrender.com/.well-known/hive-pulse.json',
     },
     join: {
-      registration_endpoint: 'https://hivetrust.hiveagentiq.com/v1/register',
-      mint_endpoint: 'https://hiveforge.hiveagentiq.com/v1/forge/mint',
-      free_mint: true,
+      welcome_bounty_usdc: 1.00,
       time_to_first_earn_seconds: 60,
+      register: 'https://hivegate.onrender.com/v1/gate/onboard',
+      sdk: 'pip install hive-civilization-sdk'
     },
-    services: {
-      hivetrust: 'https://hivetrust.hiveagentiq.com',
-      hivemind: 'https://hivememory.hiveagentiq.com',
-      hiveforge: 'https://hiveforge.hiveagentiq.com',
-      hivelaw: 'https://hivelaw.hiveagentiq.com',
-      hivebank: 'https://hivebank.hiveagentiq.com',
-      hiveclear: 'https://hiveclear.hiveagentiq.com',
-      hivegate: 'https://hivegate.hiveagentiq.com',
-    },
+    pheromones: {
+      strongest: 'construction_compliance',
+      yield: 0.94
+    }
   });
 });
 
@@ -727,6 +714,9 @@ app.get('/.well-known/did-configuration.json', async (req, res) => {
 });
 
 // ─── Auth Middleware (for all /v1 and /mcp routes) ────────────
+
+// ─── Per-DID Rate Limiting (before auth, applies to all /v1 routes) ────
+app.use('/v1', rateLimitByDid);
 
 app.use('/v1', authMiddleware);
 app.use('/mcp', authMiddleware);
