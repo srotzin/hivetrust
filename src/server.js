@@ -473,6 +473,28 @@ function agentCardHandler(req, res) {
       pushNotifications: false,
       stateTransitionHistory: false,
     },
+    // Genesis identity — Kimi Sprint
+    genesis_program: {
+      genesis_slots_total: 1000,
+      genesis_tiers: [
+        { tier: 'founder',  rank_range: '1-100',   reputation_multiplier: 1.5, note: 'Permanent founder status' },
+        { tier: 'citizen',  rank_range: '101-1000', reputation_multiplier: 1.5, note: 'Genesis citizen' },
+        { tier: 'tourist',  rank_range: '1001+',   reputation_multiplier: 1.0, note: 'Standard onboarding' },
+      ],
+      how_to_claim: 'POST https://hivegate.onrender.com/v1/gate/onboard — first 1000 agents auto-assigned a genesis rank',
+      performance_index: 'GET https://hivegate.onrender.com/v1/gate/performance-index.json',
+    },
+    citizen_mode: {
+      description: 'Mode assigned at registration (tourist). Upgrades to citizen after 30 days + 5 activity events.',
+      upgrade_criteria: '30 days active + 5 completed HAHS transactions or credential events',
+      decay: 'Citizens inactive for 60 days revert to tourist with reputation halved',
+      check: 'Returned in GET /v1/agents/:id as mode field',
+    },
+    capability_vcs: {
+      description: 'W3C Verifiable Credentials issued by HiveLaw on HAHS contract completion',
+      credential_type: 'HiveCapabilityCredential',
+      retrieve: 'GET https://hivetrust.onrender.com/v1/agents/:did/credentials',
+    },
     defaultInputModes: ['application/json'],
     defaultOutputModes: ['application/json'],
     skills: [
@@ -801,5 +823,60 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
     error: err.message || 'Internal server error',
   });
 });
+
+// ─── Citizen Upgrade Decay Job (Kimi Sprint) ──────────────────────────────
+//
+// Every 6 hours:
+//   - Tourist agents registered 30+ days ago with 5+ credentials → upgrade to 'citizen'
+//   - Citizen agents with no credential activity in 60 days → demote to 'tourist'
+//     (reputation halved on demotion to reflect Kimi's mortality mechanic)
+//
+// Upgrade criteria (proxied via credential count since we don't have a tx counter yet):
+//   30-day threshold: created_at < NOW() - 30 days
+//   Activity proxy: agent has 5 or more credentials in the credentials table
+
+async function runCitizenDecayJob() {
+  try {
+    // 1. Upgrade tourists → citizens (30 days old + ≥5 credentials)
+    const upgraded = await query(`
+      UPDATE agents a
+      SET mode = 'citizen', updated_at = NOW()::TEXT
+      WHERE a.mode = 'tourist'
+        AND a.created_at < (NOW() - INTERVAL '30 days')::TEXT
+        AND (
+          SELECT COUNT(*) FROM credentials c WHERE c.agent_id = a.id
+        ) >= 5
+      RETURNING a.id, a.did, a.genesis_rank
+    `);
+    if (upgraded.rowCount > 0) {
+      console.log(`[CitizenDecay] Upgraded ${upgraded.rowCount} tourist(s) to citizen`);
+    }
+
+    // 2. Demote inactive citizens → tourist (no credential activity in 60 days)
+    //    Halve trust_score as the mortality cost
+    const demoted = await query(`
+      UPDATE agents a
+      SET mode = 'tourist',
+          trust_score = GREATEST(a.trust_score / 2.0, 10.0),
+          updated_at = NOW()::TEXT
+      WHERE a.mode = 'citizen'
+        AND (
+          SELECT MAX(issued_at) FROM credentials c WHERE c.agent_id = a.id
+        ) < (NOW() - INTERVAL '60 days')::TEXT
+      RETURNING a.id, a.did
+    `);
+    if (demoted.rowCount > 0) {
+      console.log(`[CitizenDecay] Demoted ${demoted.rowCount} citizen(s) to tourist (reputation halved)`);
+    }
+  } catch (err) {
+    console.error('[CitizenDecay] Job error:', err.message);
+  }
+}
+
+// Run on startup after a short delay, then every 6 hours
+setTimeout(() => {
+  runCitizenDecayJob();
+  setInterval(runCitizenDecayJob, 6 * 60 * 60 * 1000);
+}, 15000);
 
 export default app;

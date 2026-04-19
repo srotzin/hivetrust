@@ -103,9 +103,21 @@ const SCHEMA_SQL = `
     updated_at TEXT DEFAULT (NOW()::TEXT),
     last_verified_at TEXT,
 
+    -- Genesis identity (Kimi Sprint)
+    genesis_rank INTEGER,
+    mode TEXT DEFAULT 'tourist',
+
     UNIQUE(key_fingerprint),
     UNIQUE(did)
   );
+
+  -- Safe migrations for existing deployments (Kimi Sprint — genesis_rank + mode)
+  -- These are no-ops if columns already exist.
+  DO $$ BEGIN
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS genesis_rank INTEGER;
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS mode TEXT DEFAULT 'tourist';
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END $$;
 
   -- Agent Version History: Track every identity change
   CREATE TABLE IF NOT EXISTS agent_versions (

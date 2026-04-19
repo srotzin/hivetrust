@@ -162,6 +162,11 @@ router.post('/register', async (req, res) => {
       trust_tier: result.agent?.trust_tier,
       status: result.agent?.status,
       registration_fee_usdc: result.registration_fee_usdc,
+      // Genesis identity (Kimi Sprint)
+      genesis_rank: result.agent?.genesis_rank,
+      genesis_tier: result.agent?.genesis_tier,
+      reputation_multiplier: result.agent?.reputation_multiplier,
+      mode: result.agent?.mode || 'tourist',
       welcome_bounty: welcomeBounty,
       ritz_credits: {
         amount_usdc: 3.00,

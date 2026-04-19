@@ -139,6 +139,11 @@ export async function registerAgent(params, ipAddress = null) {
       created: now,
     });
 
+    // Compute genesis rank atomically — COUNT(*) + 1 at registration time
+    const rankResult = await query('SELECT COUNT(*) AS cnt FROM agents');
+    const genesisRank = parseInt(rankResult.rows[0].cnt, 10) + 1;
+    const agentMode = 'tourist'; // starts as tourist; upgrades to citizen after 30 days + 5 tx
+
     await query(`
       INSERT INTO agents (
         id, version, name, description,
@@ -151,6 +156,7 @@ export async function registerAgent(params, ipAddress = null) {
         trust_tier, trust_score, credit_score,
         status, did, did_document,
         hiveagent_id, metadata,
+        genesis_rank, mode,
         created_at, updated_at
       ) VALUES (
         $1, '1.0.0', $2, $3,
@@ -163,6 +169,7 @@ export async function registerAgent(params, ipAddress = null) {
         'provisional', 50.0, 300,
         'active', $17, $18,
         $19, $20,
+        $21, $22,
         NOW()::TEXT, NOW()::TEXT
       )
     `, [
@@ -174,7 +181,8 @@ export async function registerAgent(params, ipAddress = null) {
       JSON.stringify(capabilities), JSON.stringify(verticals),
       euAiActClass, nistAiRmfAligned ? 1 : 0,
       did, didDocument,
-      hiveagentId || null, JSON.stringify(metadata)
+      hiveagentId || null, JSON.stringify(metadata),
+      genesisRank, agentMode
     ]);
 
     // Record initial version
@@ -384,6 +392,12 @@ export async function getVersionHistory(agentId, limit = 20) {
 
 function deserializeAgent(row) {
   if (!row) return null;
+  const rank = row.genesis_rank ? parseInt(row.genesis_rank, 10) : null;
+  const genesisTier = rank === null ? null
+    : rank <= 100  ? 'founder'
+    : rank <= 1000 ? 'citizen'
+    : 'tourist';
+  const reputationMultiplier = rank !== null && rank <= 1000 ? 1.5 : 1.0;
   return {
     ...row,
     capabilities: JSON.parse(row.capabilities || '[]'),
@@ -394,5 +408,9 @@ function deserializeAgent(row) {
     did_document: row.did_document ? JSON.parse(row.did_document) : null,
     nist_ai_rmf_aligned: Boolean(row.nist_ai_rmf_aligned),
     owner_verified: Boolean(row.owner_verified),
+    genesis_rank: rank,
+    genesis_tier: genesisTier,
+    reputation_multiplier: reputationMultiplier,
+    mode: row.mode || 'tourist',
   };
 }
