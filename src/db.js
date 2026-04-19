@@ -119,6 +119,25 @@ const SCHEMA_SQL = `
   EXCEPTION WHEN OTHERS THEN NULL;
   END $$;
 
+  -- External Trust Lookups — the lensing event log
+  -- Every time an outside agent/platform queries Hive to evaluate a DID,
+  -- we record it. This is the metric that proves Hive is becoming the reference frame.
+  CREATE TABLE IF NOT EXISTS external_lookups (
+    id TEXT PRIMARY KEY,
+    queried_did TEXT NOT NULL,       -- the DID being evaluated
+    requester_did TEXT,              -- the agent doing the lookup (if known)
+    requester_ip TEXT,               -- IP of the requesting party
+    requester_platform TEXT,         -- self-reported platform name (optional)
+    trust_score_returned FLOAT,      -- what we told them
+    genesis_tier_returned TEXT,      -- founder/citizen/tourist/unknown
+    found BOOLEAN DEFAULT true,      -- false = DID not in Hive (that's data too)
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_ext_lookup_did      ON external_lookups(queried_did);
+  CREATE INDEX IF NOT EXISTS idx_ext_lookup_created  ON external_lookups(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_ext_lookup_requester ON external_lookups(requester_did);
+
   -- Agent Version History: Track every identity change
   CREATE TABLE IF NOT EXISTS agent_versions (
     id TEXT PRIMARY KEY,

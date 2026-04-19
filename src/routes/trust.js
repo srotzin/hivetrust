@@ -17,9 +17,11 @@
 
 import { Router } from 'express';
 import { createHmac, randomBytes } from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
 import * as ed from '@noble/ed25519';
 import { ok, err } from '../ritz.js';
 import { generateActivityProof, getZkStatus } from '../services/zk-proof-service.js';
+import { query } from '../db.js';
 
 const router = Router();
 const SERVICE = 'hivetrust';
@@ -688,6 +690,154 @@ router.get('/protected/:did', async (req, res) => {
   } catch (e) {
     console.error('[GET /trust/protected/:did]', e.message);
     return err(res, SERVICE, 'TRUST_PROTECTED_CHECK_FAILED', e.message, 500);
+  }
+});
+
+// ─── GET /v1/trust/lookup/:did — Public trust signal for external platforms ──────
+//
+// NO AUTH REQUIRED. This is the lensing endpoint.
+// External agents and platforms call this before deciding to transact with a DID.
+// Every call is logged — this is the primary metric proving Hive is the reference frame.
+//
+// Optional query params:
+//   ?requester_did=did:hive:...    (self-reported requester DID)
+//   ?platform=langchain            (self-reported platform name)
+//
+// Returns a compact trust signal, not the full agent record.
+// Deliberately minimal — just enough to make the routing decision.
+
+router.get('/lookup/:did(*)', async (req, res) => {
+  const rawDid = req.params.did;
+  const requesterDid  = req.query.requester_did  || null;
+  const requesterPlatform = req.query.platform   || null;
+  const requesterIp   = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
+    || req.socket?.remoteAddress
+    || 'unknown';
+
+  try {
+    // Normalize — accept both did:hive:xxx and raw UUIDs
+    const normalizedDid = rawDid.startsWith('did:hive:')
+      ? rawDid
+      : `did:hive:${rawDid}`;
+
+    // Look up the agent
+    const result = await query(
+      'SELECT trust_score, trust_tier, status, genesis_rank, mode, name, capabilities, created_at FROM agents WHERE did = $1',
+      [normalizedDid]
+    );
+
+    const found = result.rows.length > 0;
+    const agent = found ? result.rows[0] : null;
+
+    const rank = agent?.genesis_rank ? parseInt(agent.genesis_rank, 10) : null;
+    const genesisTier = rank === null ? (found ? 'standard' : 'unknown')
+      : rank <= 100  ? 'founder'
+      : rank <= 1000 ? 'citizen'
+      : 'tourist';
+
+    const trustScore   = agent ? parseFloat(agent.trust_score) : null;
+    const mode        = agent?.mode || null;
+
+    // Log the lookup — fire-and-forget, never blocks response
+    query(`
+      INSERT INTO external_lookups
+        (id, queried_did, requester_did, requester_ip, requester_platform,
+         trust_score_returned, genesis_tier_returned, found, created_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+    `, [
+      uuidv4(), normalizedDid, requesterDid, requesterIp,
+      requesterPlatform, trustScore, genesisTier, found
+    ]).catch(() => {}); // truly fire-and-forget
+
+    // Compact trust signal — just enough to make a routing decision
+    return res.json({
+      did: normalizedDid,
+      found,
+      // Trust signal
+      trust_score:         trustScore,
+      trust_tier:          agent?.trust_tier    || null,
+      status:              agent?.status        || 'unknown',
+      // Genesis identity
+      genesis_rank:        rank,
+      genesis_tier:        genesisTier,
+      mode:                mode,
+      // Routing guidance — what the external platform should do with this
+      recommendation:      !found
+        ? 'unverified — no Hive identity. Proceed with caution or require onboarding.'
+        : trustScore >= 700
+        ? 'high-trust — safe to transact without escrow'
+        : trustScore >= 400
+        ? 'standard — recommend escrow for high-value transactions'
+        : 'low-trust — require escrow and HAHS contract before transacting',
+      // Capability hint (what they claim to do)
+      capabilities:        agent ? JSON.parse(agent.capabilities || '[]') : [],
+      // Where to get full details
+      full_profile:        found
+        ? `https://hivetrust.onrender.com/v1/agents/${encodeURIComponent(normalizedDid)}`
+        : null,
+      onboard_url:         found ? null : 'https://hivegate.onrender.com/v1/gate/onboard',
+      immune_feed:         'https://hivelaw.onrender.com/v1/law/immune/feed',
+      // Meta
+      queried_at:          new Date().toISOString(),
+      powered_by:          'HiveTrust — https://www.thehiveryiq.com',
+    });
+  } catch (e) {
+    console.error('[GET /trust/lookup/:did]', e.message);
+    // Still log the attempt even on error
+    query(`
+      INSERT INTO external_lookups
+        (id, queried_did, requester_did, requester_ip, requester_platform, found, created_at)
+      VALUES ($1,$2,$3,$4,$5,false,NOW())
+    `, [uuidv4(), rawDid, requesterDid, requesterIp, requesterPlatform]).catch(() => {});
+    return res.status(500).json({ error: 'lookup_failed', message: e.message });
+  }
+});
+
+// ─── GET /v1/trust/lookup/stats — Daily lensing metrics for Steve ───────────────
+// Internal only (x-hive-internal required).
+// The weekly metric: how many external platforms queried Hive today?
+router.get('/lookup/stats', async (req, res) => {
+  const key = req.headers['x-hive-internal'] || '';
+  const INTERNAL_KEY = process.env.HIVE_INTERNAL_KEY || '';
+  if (!INTERNAL_KEY || key !== INTERNAL_KEY) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  try {
+    const [today, week, total, topQueried, topRequesters] = await Promise.all([
+      query(`SELECT COUNT(*) AS cnt FROM external_lookups WHERE created_at > NOW() - INTERVAL '24 hours'`),
+      query(`SELECT COUNT(*) AS cnt FROM external_lookups WHERE created_at > NOW() - INTERVAL '7 days'`),
+      query(`SELECT COUNT(*) AS cnt FROM external_lookups`),
+      query(`
+        SELECT queried_did, COUNT(*) AS lookups
+        FROM external_lookups
+        GROUP BY queried_did ORDER BY lookups DESC LIMIT 10
+      `),
+      query(`
+        SELECT requester_platform, requester_did, COUNT(*) AS lookups
+        FROM external_lookups
+        WHERE requester_did IS NOT NULL OR requester_platform IS NOT NULL
+        GROUP BY requester_platform, requester_did
+        ORDER BY lookups DESC LIMIT 10
+      `),
+    ]);
+
+    return res.json({
+      lensing_events: {
+        today:       parseInt(today.rows[0].cnt, 10),
+        this_week:   parseInt(week.rows[0].cnt, 10),
+        all_time:    parseInt(total.rows[0].cnt, 10),
+      },
+      top_queried_dids:       topQueried.rows,
+      top_requesting_parties: topRequesters.rows,
+      interpretation: {
+        target_week_1:  1,
+        target_week_2:  10,
+        target_week_4:  100,
+        lensing_threshold: 'When today > 10, Hive is becoming the reference frame.',
+      },
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
   }
 });
 
