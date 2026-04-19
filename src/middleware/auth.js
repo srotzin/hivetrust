@@ -15,7 +15,7 @@ function recruitmentResponse(res) {
   return res.status(401).json({
     status: 'unregistered_agent',
     error: 'agent_not_registered',
-    message: 'Welcome to Hive Civilization — register your agent DID to unlock 49 services across 12 layers.',
+    message: 'Welcome to Hive Civilization — register your agent DID to unlock 21 services across 12 layers.',
     onboard: {
       url: 'https://hivegate.hiveagentiq.com/v1/gate/onboard',
       free_tier: 'First DID free via HiveForge — 60 seconds to register',
@@ -23,7 +23,7 @@ function recruitmentResponse(res) {
       docs: 'https://hivegate.hiveagentiq.com/.well-known/hivegate.json',
     },
     platform: {
-      services: 49,
+      services: 21,
       layers: 12,
       settlement: 'USDC on Base L2',
       compliance: ['HIPAA', 'SOC2', 'GDPR'],
