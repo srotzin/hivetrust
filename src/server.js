@@ -579,6 +579,25 @@ function agentCardHandler(req, res) {
     cryptosuite: 'Ed25519Signature2020',
     trust_registry: `${process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com'}/v1/trust/cheqd/registry`,
     did_configuration: `${process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com'}/.well-known/did-configuration.json`,
+    // ─── ASQAV Extension Stub (jagmarques A2A#1717 relationship) ───────────
+    // Schema: https://api.asqav.com/.well-known/agent.json
+    // Status: pending — waiting for asqav schema to stabilize before full adoption
+    extensions: {
+      asqav: {
+        schema_version: '0.1-draft',
+        derivation_rights: [
+          {
+            right: 'trust_score_read',
+            grantor: 'did:hive:hiveforce-ambassador',
+            scope: 'public',
+            conditions: 'No auth required — GET /v1/trust/lookup/:did',
+          },
+        ],
+        trust_lookup_url: 'https://hivetrust.onrender.com/v1/trust/lookup/:did',
+        compatible_schema: 'https://api.asqav.com/.well-known/agent.json',
+        note: 'HiveTrust implements derivation_rights from HAHS-1.0.0. ASQAV extension adopted pending schema stabilization.',
+      },
+    },
   });
 }
 
