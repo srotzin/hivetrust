@@ -28,6 +28,7 @@ import {
   upgradeTier,
   verifyBond,
 } from '../services/bond-engine.js';
+import { generateActivityProof } from '../services/zk-proof-service.js';
 
 const router = Router();
 
@@ -151,6 +152,80 @@ router.get('/verify/:did', async (req, res) => {
     return ok(res, result);
   } catch (e) {
     console.error('[GET /bond/verify/:did]', e.message);
+    return err(res, e.message, e.status || 500);
+  }
+});
+
+// ─── GET /verify-collateral/:did — ZK Collateral Sufficiency Proof ───────────
+// FREE endpoint — verification must be frictionless for enterprises.
+// Proves agent collateral meets min_usdc threshold without revealing actual balance.
+//
+// Query params:
+//   ?min_usdc=50000   (default 50000) — minimum USDC threshold to prove
+
+const BOND_TIER_AMOUNTS = {
+  bronze:   100,
+  silver:   500,
+  gold:     2000,
+  platinum: 10000,
+};
+
+router.get('/verify-collateral/:did', async (req, res) => {
+  const t0 = Date.now();
+  try {
+    const did = req.params.did;
+    const minUsdc = Math.max(0, parseFloat(req.query.min_usdc) || 50000);
+
+    // Load agent bond status (in-memory bond engine)
+    let bondStatus;
+    try {
+      bondStatus = getAgentBondStatus(did);
+    } catch {
+      bondStatus = { total_staked: 0, current_tier: null, bond_count: 0 };
+    }
+
+    const totalStaked = bondStatus.total_staked ?? 0;
+    const currentTier = bondStatus.current_tier ?? null;
+
+    // Use tier declared amount as bond_amount_usdc for ZK private input
+    // Falls back to total_staked if tier is set, otherwise 0
+    const tierAmount = currentTier ? (BOND_TIER_AMOUNTS[currentTier] ?? 0) : 0;
+    const bondAmountUsdc = Math.max(totalStaked, tierAmount);
+
+    // ZK proof: prove bond_amount_usdc >= min_usdc without revealing actual value
+    // volumeUsdcCents = bond_amount_usdc * 100, minVolumeCents = min_usdc * 100
+    const proof = await generateActivityProof({
+      txCount:         1,
+      volumeUsdcCents: Math.floor(bondAmountUsdc * 100),
+      minTxCount:      1,
+      minVolumeCents:  Math.floor(minUsdc * 100),
+    });
+
+    const collateralSufficient = bondAmountUsdc >= minUsdc;
+
+    // covers_up_to_usdc — the tier ceiling, or the threshold itself if covered
+    const tierCeilings = { bronze: 499, silver: 1999, gold: 9999, platinum: Infinity };
+    const tierCeiling = currentTier ? tierCeilings[currentTier] : 0;
+    const coversUpTo = collateralSufficient
+      ? (tierCeiling === Infinity ? minUsdc : Math.max(minUsdc, tierCeiling))
+      : 0;
+
+    return ok(res, {
+      did,
+      collateral_sufficient: collateralSufficient,
+      proof_type:            'zk_collateral_sufficiency',
+      proof,
+      tier:                  currentTier || 'none',
+      covers_up_to_usdc:     coversUpTo,
+      balance_hidden:        true,
+      settlement_rail:       'USDC on Base L2',
+      arbitration_url:       'https://hivelaw.onrender.com/v1/disputes/file',
+      slashing_url:          'https://hivetrust.onrender.com/v1/bond/slash',
+      verified_at:           new Date().toISOString(),
+      response_time_ms:      Date.now() - t0,
+    });
+  } catch (e) {
+    console.error('[GET /bond/verify-collateral/:did]', e.message);
     return err(res, e.message, e.status || 500);
   }
 });

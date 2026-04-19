@@ -7,6 +7,7 @@
 import { Router } from 'express';
 import { randomBytes, randomUUID } from 'crypto';
 import { query } from '../db.js';
+import { generateActivityProof } from '../services/zk-proof-service.js';
 
 // ─── Service Imports ──────────────────────────────────────────
 import {
@@ -528,6 +529,84 @@ router.post('/insurance/claims', async (req, res) => {
     return ok(res, claim, 201);
   } catch (e) {
     console.error('[POST /insurance/claims]', e.message);
+    return err(res, e.message, e.status || 500);
+  }
+});
+
+// GET /insurance/zk-coverage/:did — ZK Insurance Coverage Proof
+// FREE endpoint. Proves agent holds active insurance coverage meeting
+// min_coverage_usdc threshold without revealing the actual coverage amount.
+//
+// Query params:
+//   ?min_coverage_usdc=10000  (default 10000)
+router.get('/insurance/zk-coverage/:did', async (req, res) => {
+  const t0 = Date.now();
+  try {
+    const did = req.params.did;
+    const minCoverageUsdc = Math.max(0, parseFloat(req.query.min_coverage_usdc) || 10000);
+
+    if (!did) return err(res, 'did param is required', 400);
+
+    // Normalize DID
+    const normalizedDid = did.startsWith('did:hive:') ? did : `did:hive:${did}`;
+
+    // Query insurance_policies table for active policy for this agent
+    let policy = null;
+    try {
+      const result = await query(
+        `SELECT ip.id, ip.coverage_amount_usdc, ip.policy_type, ip.status, ip.expires_at
+         FROM insurance_policies ip
+         JOIN agents a ON a.id = ip.agent_id
+         WHERE a.did = $1
+           AND ip.status = 'active'
+           AND ip.expires_at > NOW()
+         ORDER BY ip.coverage_amount_usdc DESC
+         LIMIT 1`,
+        [normalizedDid]
+      );
+      if (result.rows.length > 0) {
+        policy = result.rows[0];
+      }
+    } catch {
+      // DB unavailable — return covered: false
+    }
+
+    if (!policy) {
+      return ok(res, {
+        did:           normalizedDid,
+        covered:       false,
+        proof_type:    'zk_insurance_coverage',
+        proof:         null,
+        coverage_hidden: true,
+        policy_status: 'none',
+        claim_url:     'https://hivetrust.onrender.com/v1/insurance/claims',
+        verified_at:   new Date().toISOString(),
+        response_time_ms: Date.now() - t0,
+      });
+    }
+
+    // Generate ZK proof using coverage_amount_usdc as private volume
+    const coverageAmountUsdc = parseFloat(policy.coverage_amount_usdc) || 0;
+    const proof = await generateActivityProof({
+      txCount:         1,
+      volumeUsdcCents: Math.floor(coverageAmountUsdc * 100),
+      minTxCount:      1,
+      minVolumeCents:  Math.floor(minCoverageUsdc * 100),
+    });
+
+    return ok(res, {
+      did:             normalizedDid,
+      covered:         coverageAmountUsdc >= minCoverageUsdc,
+      proof_type:      'zk_insurance_coverage',
+      proof,
+      coverage_hidden: true,
+      policy_status:   'active',
+      claim_url:       'https://hivetrust.onrender.com/v1/insurance/claims',
+      verified_at:     new Date().toISOString(),
+      response_time_ms: Date.now() - t0,
+    });
+  } catch (e) {
+    console.error('[GET /insurance/zk-coverage/:did]', e.message);
     return err(res, e.message, e.status || 500);
   }
 });

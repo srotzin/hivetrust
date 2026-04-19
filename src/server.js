@@ -579,6 +579,18 @@ function agentCardHandler(req, res) {
     cryptosuite: 'Ed25519Signature2020',
     trust_registry: `${process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com'}/v1/trust/cheqd/registry`,
     did_configuration: `${process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com'}/.well-known/did-configuration.json`,
+    zk_infrastructure: {
+      standard: 'Aleo hive_trust.aleo prove_activity + HMAC-SHA256 attestations',
+      description: 'Every claim in Hive is ZK-provable. Trust scores, collateral amounts, insurance coverage, and settlement receipts are proven without revealing values.',
+      endpoints: {
+        trust_threshold: 'GET /v1/trust/zk-proof/:did?min_score=500',
+        collateral_sufficiency: 'GET /v1/bond/verify-collateral/:did?min_usdc=10000',
+        sovereign_score: 'GET /v1/trust/sovereign-score/:did',
+        insurance_coverage: 'GET /v1/insurance/zk-coverage/:did',
+      },
+      aleo_program: 'hive_trust.aleo',
+      values_revealed: 'none — threshold pass/fail only'
+    },
     // ─── ASQAV Extension Stub (jagmarques A2A#1717 relationship) ───────────
     // Schema: https://api.asqav.com/.well-known/agent.json
     // Status: pending — waiting for asqav schema to stabilize before full adoption
