@@ -24,10 +24,10 @@ function recruitmentResponse(res) {
     },
     platform: {
       services: 21,
-      layers: 12,
+      layers: 13,
       settlement: 'USDC on Base L2',
       compliance: ['HIPAA', 'SOC2', 'GDPR'],
-      website: 'https://hiveagentiq.com',
+      website: 'https://thehiveryiq.com',
     },
     referral: {
       program: 'Earn 15% commission on every agent you refer',
@@ -61,12 +61,14 @@ const PUBLIC_PREFIXES = [
   '/v1/oracle/streams',
   '/v1/trust/wallet-attestation',
   '/v1/trust/zk-status',
+  '/v1/trust/lookup',   // public lensing endpoint — no auth required
   '/verify_agent_risk',
   '/stats',
   '/pricing',
   '/oracle/streams',
   '/trust/wallet-attestation',
   '/trust/zk-status',
+  '/trust/lookup',
 ];
 
 function hashKey(rawKey) {
