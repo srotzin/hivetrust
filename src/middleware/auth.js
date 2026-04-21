@@ -70,6 +70,7 @@ const PUBLIC_PREFIXES = [
   '/trust/wallet-attestation',
   '/trust/zk-status',
   '/trust/lookup',
+  '/trust/register',    // when mounted at /v1, req.path is /trust/register
 ];
 
 function hashKey(rawKey) {
