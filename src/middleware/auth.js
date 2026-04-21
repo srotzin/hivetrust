@@ -71,6 +71,8 @@ const PUBLIC_PREFIXES = [
   '/trust/zk-status',
   '/trust/lookup',
   '/trust/register',    // when mounted at /v1, req.path is /trust/register
+  '/trust/score/',      // x402-gated already — auth layer should not double-gate
+  '/trust/lookup',
 ];
 
 function hashKey(rawKey) {

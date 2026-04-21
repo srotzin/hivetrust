@@ -574,11 +574,36 @@ router.get('/score/:did', async (req, res) => {
       return err(res, SERVICE, 'MISSING_DID', 'did param is required', 400);
     }
 
-    // Resolve from in-memory registry
-    const entry = trustRegistry.get(did) ?? null;
+    // Resolve from in-memory registry first; fall back to DB (handles cold-start + recently registered agents)
+    let entry = trustRegistry.get(did) ?? null;
 
     if (!entry) {
-      // DID not in local registry — return a default unrated response
+      // DB fallback — agent may have been registered but not yet in warm-up window
+      try {
+        const dbResult = await query(
+          'SELECT did, name, trust_score, trust_tier, created_at FROM agents WHERE did = $1 AND status = \'active\'',
+          [did]
+        );
+        if (dbResult.rows.length > 0) {
+          const row = dbResult.rows[0];
+          entry = {
+            did: row.did,
+            publicKeyMultibase: null,
+            trust_score: row.trust_score ?? 500,
+            label: row.name || row.did,
+            credentials: [],
+            issued_at: row.created_at || new Date().toISOString(),
+          };
+          // Backfill in-memory registry so next call is instant
+          trustRegistry.set(did, entry);
+        }
+      } catch (dbErr) {
+        console.warn('[GET /trust/score] DB fallback failed:', dbErr.message);
+      }
+    }
+
+    if (!entry) {
+      // DID not in local registry or DB — return a default unrated response
       return ok(res, SERVICE, {
         did,
         trust_score: null,
@@ -589,7 +614,7 @@ router.get('/score/:did', async (req, res) => {
           protocol: 'x402',
           note: '$0.10 USDC charged per behavioral trust score lookup',
         },
-        hint: 'Register this DID via POST /v1/trust/did/generate or POST /v1/register to establish a trust score.',
+        hint: 'Register this DID via POST /v1/trust/register to establish a trust score.',
       });
     }
 
