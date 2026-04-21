@@ -73,6 +73,8 @@ const PUBLIC_PREFIXES = [
   '/trust/lookup',
   '/trust/register',    // when mounted at /v1, req.path is /trust/register
   '/trust/issue',       // when mounted at /v1, req.path is /trust/issue
+  '/v1/trust/issue-smsh', // smsh badge issuance — free
+  '/trust/issue-smsh',  // when mounted at /v1
   '/trust/score/',      // x402-gated already — auth layer should not double-gate
   '/trust/lookup',
 ];

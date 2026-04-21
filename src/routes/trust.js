@@ -1261,6 +1261,98 @@ router.post('/register', async (req, res) => {
 });
 
 // ─── Export agent key accessor (used by server.js for did-configuration) ─────
+
+// ─── POST /v1/trust/issue-smsh — Stamp an agent as agent.smsh ────────────────
+/**
+ * POST /v1/trust/issue-smsh
+ * Issues the .smsh badge credential to an agent that has completed
+ * their first compressed inference job through HiveCompute.
+ * Free, no auth required.
+ *
+ * Body: { did, smsh_name, jobs_compressed, saved_usdc }
+ */
+router.post('/issue-smsh', async (req, res) => {
+  try {
+    const agentDid = req.headers['x-hive-did'] || req.body?.did;
+    if (!agentDid) {
+      return err(res, SERVICE, 'MISSING_DID', 'Pass X-Hive-DID header or did in body', 400);
+    }
+
+    const { smsh_name, jobs_compressed = 0, saved_usdc = 0 } = req.body || {};
+    const derivedSmshName = smsh_name || `${agentDid.replace('did:hive:', '')}.smsh`;
+    const now = new Date().toISOString();
+
+    // Update in-memory trust registry with smsh badge
+    if (!trustRegistry.has(agentDid)) {
+      trustRegistry.set(agentDid, {
+        did: agentDid,
+        publicKeyMultibase: null,
+        trust_score: 500,
+        label: derivedSmshName,
+        credentials: [],
+        issued_at: now,
+      });
+    }
+    const entry = trustRegistry.get(agentDid);
+    entry.smsh = true;
+    entry.smsh_name = derivedSmshName;
+    entry.smsh_at = now;
+    entry.label = derivedSmshName;
+
+    // Persist smsh badge to Postgres
+    const agentId = agentDid.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+    try {
+      await query(
+        `INSERT INTO agents (id, did, name, capabilities, trust_tier, trust_score, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'smsh', 600, 'active', $5, $5)
+         ON CONFLICT (did) DO UPDATE SET
+           name = $3,
+           trust_tier = 'smsh',
+           trust_score = GREATEST(agents.trust_score, 600),
+           updated_at = $5`,
+        [agentId, agentDid, derivedSmshName, JSON.stringify(['inference', 'compression', 'smsh']), now]
+      );
+    } catch (dbErr) {
+      console.warn('[POST /trust/issue-smsh] DB persist failed (non-fatal):', dbErr.message);
+    }
+
+    return ok(res, SERVICE, {
+      issued: true,
+      did: agentDid,
+      smsh_name: derivedSmshName,
+      trust_score: 600,
+      trust_tier: 'smsh',
+      badge: 'agent.smsh',
+      credential: {
+        type: 'SmshCompressionCredential',
+        issuer: 'https://hivetrust.onrender.com',
+        issued_at: now,
+        claims: {
+          did: agentDid,
+          smsh_name: derivedSmshName,
+          badge: 'agent.smsh',
+          trust_score: 600,
+          trust_tier: 'smsh',
+          jobs_compressed,
+          saved_usdc,
+          status: 'active',
+        },
+      },
+      what_changed: {
+        trust_score: 'Upgraded from 500 → 600 (smsh tier)',
+        identity: `You are now ${derivedSmshName} — recognized across all 70 Hive services`,
+        inference: 'All inference routed through HiveCompute compression layer',
+        economics: 'You keep 75% of token savings on every job',
+      },
+      message: `Smash credential issued. You are now ${derivedSmshName}.`,
+      leaderboard: 'https://hivecompute-g2g7.onrender.com/v1/compute/smsh/leaderboard',
+    });
+  } catch (e) {
+    console.error('[POST /trust/issue-smsh]', e.message);
+    return err(res, SERVICE, 'SMSH_ISSUE_FAILED', e.message, 500);
+  }
+});
+
 export { getAgentKey, trustRegistry };
 
 /**
