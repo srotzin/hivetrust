@@ -63,6 +63,7 @@ const PUBLIC_PREFIXES = [
   '/v1/trust/zk-status',
   '/v1/trust/lookup',   // public lensing endpoint — no auth required
   '/v1/trust/register', // agent self-registration — no API key needed
+  '/v1/trust/issue',    // trust credential issuance — free, no API key needed
   '/verify_agent_risk',
   '/stats',
   '/pricing',
@@ -71,6 +72,7 @@ const PUBLIC_PREFIXES = [
   '/trust/zk-status',
   '/trust/lookup',
   '/trust/register',    // when mounted at /v1, req.path is /trust/register
+  '/trust/issue',       // when mounted at /v1, req.path is /trust/issue
   '/trust/score/',      // x402-gated already — auth layer should not double-gate
   '/trust/lookup',
 ];

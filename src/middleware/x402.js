@@ -404,7 +404,7 @@ function isFreePath(path) {
   if (path.startsWith('/verify_agent_risk')) return true;
   if (path.startsWith('/pricing')) return true;
   if (path === '/trust/wallet-attestation' || path === '/trust/zk-status') return true;
-  if (path === '/trust/register' || path.startsWith('/trust/lookup')) return true;  // self-registration + public lookup are always free
+  if (path === '/trust/register' || path === '/trust/issue' || path.startsWith('/trust/lookup')) return true;  // self-registration, credential issuance + public lookup are always free
   if (ORACLE_FREE_PATHS.has(path)) return true;
   if (path.startsWith('/oracle/lease/') || path.startsWith('/oracle/leases/')) return true;
   if (BOND_FREE_PATHS.has(path)) return true;

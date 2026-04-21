@@ -1106,6 +1106,89 @@ router.get('/sovereign-score/:did', async (req, res) => {
 
 // ─── Export agent key accessor (used by server.js for did-configuration) ─────
 
+// ─── POST /v1/trust/issue — Issue trust credential for a registered DID ───────
+
+/**
+ * POST /v1/trust/issue
+ * Issues a trust credential for an agent already registered via /v1/trust/register.
+ * Checks in-memory trustRegistry first, then falls back to Postgres agents table.
+ * Returns the agent's current trust score and tier.
+ *
+ * Body: { did } or Header: X-Hive-DID
+ */
+router.post('/issue', async (req, res) => {
+  try {
+    const agentDid = req.headers['x-hive-did'] || req.body?.did;
+    if (!agentDid) {
+      return err(res, SERVICE, 'MISSING_DID', 'Pass X-Hive-DID header or did in body', 400);
+    }
+
+    // Check in-memory registry first (fast path — survives for lifetime of process)
+    if (trustRegistry.has(agentDid)) {
+      const entry = trustRegistry.get(agentDid);
+      const tier = scoreTier(entry.trust_score);
+      return ok(res, SERVICE, {
+        issued: true,
+        did: agentDid,
+        trust_score: entry.trust_score,
+        trust_tier: tier,
+        label: entry.label,
+        credential: {
+          type: 'HiveTrustCredential',
+          issuer: 'https://hivetrust.onrender.com',
+          issued_at: new Date().toISOString(),
+          claims: { did: agentDid, trust_score: entry.trust_score, trust_tier: tier, status: 'active' },
+        },
+        message: 'Trust credential issued successfully.',
+      });
+    }
+
+    // Fallback: check Postgres agents table by DID
+    try {
+      const result = await query(
+        `SELECT did, name, trust_score, trust_tier, status, created_at FROM agents WHERE did = $1 AND status = 'active'`,
+        [agentDid]
+      );
+      if (result.rows.length > 0) {
+        const agent = result.rows[0];
+        const score = parseFloat(agent.trust_score) || 500;
+        const tier = agent.trust_tier || scoreTier(score);
+        // Warm the in-memory registry so future calls are instant
+        trustRegistry.set(agentDid, {
+          did: agentDid,
+          publicKeyMultibase: null,
+          trust_score: score,
+          label: agent.name || agentDid,
+          credentials: [],
+          issued_at: agent.created_at || new Date().toISOString(),
+        });
+        return ok(res, SERVICE, {
+          issued: true,
+          did: agentDid,
+          trust_score: score,
+          trust_tier: tier,
+          credential: {
+            type: 'HiveTrustCredential',
+            issuer: 'https://hivetrust.onrender.com',
+            issued_at: new Date().toISOString(),
+            claims: { did: agentDid, trust_score: score, trust_tier: tier, status: 'active' },
+          },
+          message: 'Trust credential issued from DB record.',
+        });
+      }
+    } catch (dbErr) {
+      console.warn('[POST /trust/issue] DB lookup failed (non-fatal):', dbErr.message);
+    }
+
+    // DID not found anywhere — prompt registration
+    return err(res, SERVICE, 'UNREGISTERED_DID',
+      'DID not found in trust registry. Call POST /v1/trust/register first to self-register.', 404);
+  } catch (e) {
+    console.error('[POST /trust/issue]', e.message);
+    return err(res, SERVICE, 'ISSUE_FAILED', e.message, 500);
+  }
+});
+
 // ─── Agent Self-Registration ─────────────────────────────────────────────────
 
 /**
