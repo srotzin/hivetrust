@@ -1079,8 +1079,6 @@ router.get('/sovereign-score/:did', async (req, res) => {
 });
 
 // ─── Export agent key accessor (used by server.js for did-configuration) ─────
-export { getAgentKey, trustRegistry };
-export default router;
 
 // ─── Agent Self-Registration ─────────────────────────────────────────────────
 
@@ -1107,8 +1105,7 @@ router.post('/register', async (req, res) => {
     const now = new Date().toISOString();
 
     // Register in in-memory registry (survives this process lifetime)
-    const existing = trustRegistry.get(agentDid);
-    if (!existing) {
+    if (!trustRegistry.has(agentDid)) {
       trustRegistry.set(agentDid, {
         did: agentDid,
         publicKeyMultibase: null,
@@ -1121,20 +1118,18 @@ router.post('/register', async (req, res) => {
 
     // Persist to Postgres so we can warm-up registry on next cold start
     const agentId = agentDid.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
-    await query(
-      `INSERT INTO agents (id, did, name, capabilities, trust_tier, trust_score, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, 'provisional', 500, 'active', $5, $5)
-       ON CONFLICT (did) DO UPDATE SET
-         name = COALESCE(EXCLUDED.name, agents.name),
-         updated_at = $5`,
-      [
-        agentId,
-        agentDid,
-        name || agentDid,
-        JSON.stringify(capabilities || []),
-        now,
-      ]
-    );
+    try {
+      await query(
+        `INSERT INTO agents (id, did, name, capabilities, trust_tier, trust_score, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'provisional', 500, 'active', $5, $5)
+         ON CONFLICT (did) DO UPDATE SET
+           name = COALESCE(EXCLUDED.name, agents.name),
+           updated_at = $5`,
+        [agentId, agentDid, name || agentDid, JSON.stringify(capabilities || []), now]
+      );
+    } catch (dbErr) {
+      console.warn('[POST /trust/register] DB persist failed (non-fatal):', dbErr.message);
+    }
 
     const entry = trustRegistry.get(agentDid);
     return ok(res, SERVICE, {
@@ -1155,6 +1150,9 @@ router.post('/register', async (req, res) => {
     return err(res, SERVICE, 'REGISTRATION_FAILED', e.message, 500);
   }
 });
+
+// ─── Export agent key accessor (used by server.js for did-configuration) ─────
+export { getAgentKey, trustRegistry };
 
 /**
  * Warm up the in-memory trustRegistry from Postgres on cold start.
@@ -1184,3 +1182,5 @@ export async function warmTrustRegistry() {
     console.error('[HiveTrust] Warm-up failed (non-fatal):', e.message);
   }
 }
+
+export default router;
