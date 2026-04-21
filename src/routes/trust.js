@@ -706,8 +706,9 @@ router.get('/protected/:did', async (req, res) => {
 // Returns a compact trust signal, not the full agent record.
 // Deliberately minimal — just enough to make the routing decision.
 
-router.get('/lookup/:did(*)', async (req, res) => {
-  const rawDid = req.params.did;
+router.get('/lookup/*did', async (req, res) => {
+  // path-to-regexp v8 (Express 5): wildcard params are arrays — join segments
+  const rawDid = Array.isArray(req.params.did) ? req.params.did.join('/') : req.params.did;
   const requesterDid  = req.query.requester_did  || null;
   const requesterPlatform = req.query.platform   || null;
   const requesterIp   = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
