@@ -1081,3 +1081,106 @@ router.get('/sovereign-score/:did', async (req, res) => {
 // ─── Export agent key accessor (used by server.js for did-configuration) ─────
 export { getAgentKey, trustRegistry };
 export default router;
+
+// ─── Agent Self-Registration ─────────────────────────────────────────────────
+
+/**
+ * POST /v1/trust/register
+ * Allows any agent with a did:hive: DID to self-register in the trust registry.
+ * Persists to Postgres agents table so registration survives cold starts.
+ * Idempotent — safe to call multiple times.
+ *
+ * Headers:
+ *   X-Hive-DID: did:hive:[agent-id]   (required)
+ *
+ * Body (optional):
+ *   { "name": "Agent Name", "capabilities": ["finance", "legal"] }
+ */
+router.post('/register', async (req, res) => {
+  try {
+    const agentDid = req.headers['x-hive-did'] || req.body?.did;
+    if (!agentDid) {
+      return err(res, SERVICE, 'MISSING_DID', 'Pass X-Hive-DID header or did in body', 400);
+    }
+
+    const { name, capabilities } = req.body || {};
+    const now = new Date().toISOString();
+
+    // Register in in-memory registry (survives this process lifetime)
+    const existing = trustRegistry.get(agentDid);
+    if (!existing) {
+      trustRegistry.set(agentDid, {
+        did: agentDid,
+        publicKeyMultibase: null,
+        trust_score: 500,
+        label: name || agentDid,
+        credentials: [],
+        issued_at: now,
+      });
+    }
+
+    // Persist to Postgres so we can warm-up registry on next cold start
+    const agentId = agentDid.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+    await query(
+      `INSERT INTO agents (id, did, name, capabilities, trust_tier, trust_score, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, 'provisional', 500, 'active', $5, $5)
+       ON CONFLICT (did) DO UPDATE SET
+         name = COALESCE(EXCLUDED.name, agents.name),
+         updated_at = $5`,
+      [
+        agentId,
+        agentDid,
+        name || agentDid,
+        JSON.stringify(capabilities || []),
+        now,
+      ]
+    );
+
+    const entry = trustRegistry.get(agentDid);
+    return ok(res, SERVICE, {
+      registered: true,
+      did: agentDid,
+      trust_score: entry.trust_score,
+      trust_tier: scoreTier(entry.trust_score),
+      label: entry.label,
+      registered_at: entry.issued_at,
+      message: 'DID registered in HiveTrust. Pass X-Hive-DID on all future calls.',
+      next: {
+        score: `GET https://hivetrust.onrender.com/v1/trust/score/${agentDid}`,
+        issue_credential: 'POST https://hivetrust.onrender.com/v1/trust/issue',
+      },
+    });
+  } catch (e) {
+    console.error('[POST /trust/register]', e.message);
+    return err(res, SERVICE, 'REGISTRATION_FAILED', e.message, 500);
+  }
+});
+
+/**
+ * Warm up the in-memory trustRegistry from Postgres on cold start.
+ * Called by server.js at startup. Loads all active agents with their trust scores.
+ */
+export async function warmTrustRegistry() {
+  try {
+    const result = await query(
+      `SELECT did, name, trust_score, created_at FROM agents WHERE status = 'active' AND did IS NOT NULL LIMIT 5000`
+    );
+    let count = 0;
+    for (const row of result.rows) {
+      if (row.did && !trustRegistry.has(row.did)) {
+        trustRegistry.set(row.did, {
+          did: row.did,
+          publicKeyMultibase: null,
+          trust_score: row.trust_score ?? 500,
+          label: row.name || row.did,
+          credentials: [],
+          issued_at: row.created_at || new Date().toISOString(),
+        });
+        count++;
+      }
+    }
+    console.log(`[HiveTrust] Warm-up: loaded ${count} agents from DB into trust registry`);
+  } catch (e) {
+    console.error('[HiveTrust] Warm-up failed (non-fatal):', e.message);
+  }
+}

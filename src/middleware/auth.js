@@ -62,6 +62,7 @@ const PUBLIC_PREFIXES = [
   '/v1/trust/wallet-attestation',
   '/v1/trust/zk-status',
   '/v1/trust/lookup',   // public lensing endpoint — no auth required
+  '/v1/trust/register', // agent self-registration — no API key needed
   '/verify_agent_risk',
   '/stats',
   '/pricing',

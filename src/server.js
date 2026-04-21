@@ -37,7 +37,7 @@ import { getEngineStatus } from './services/pricing-engine.js';
 import { sendAlert } from './services/alerts.js';
 import { issueServiceToken } from './services/jwt-auth.js';
 import { ritzMiddleware, ok, err } from './ritz.js';
-import trustRouter, { getAgentKey } from './routes/trust.js';
+import trustRouter, { getAgentKey, warmTrustRegistry } from './routes/trust.js';
 
 // ─── App Setup ────────────────────────────────────────────────
 
@@ -909,5 +909,10 @@ setTimeout(() => {
   runCitizenDecayJob();
   setInterval(runCitizenDecayJob, 6 * 60 * 60 * 1000);
 }, 15000);
+
+// Warm trust registry from DB on startup (so agents survive cold starts)
+setTimeout(() => {
+  warmTrustRegistry();
+}, 3000);
 
 export default app;
