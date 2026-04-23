@@ -38,6 +38,7 @@ import { sendAlert } from './services/alerts.js';
 import { issueServiceToken } from './services/jwt-auth.js';
 import { ritzMiddleware, ok, err } from './ritz.js';
 import trustRouter, { getAgentKey, warmTrustRegistry } from './routes/trust.js';
+import aiTrustBriefRouter from './routes/ai-brief.js';
 
 // ─── App Setup ────────────────────────────────────────────────
 
@@ -819,6 +820,7 @@ app.use('/v1/viewkey', viewkeyRouter);
 // ─── Trust Routes (W3C DID Core + VCDM 2.0 + Cheqd) ─────────
 
 app.use('/v1/trust', trustRouter);
+app.use('/v1/trust/ai', aiTrustBriefRouter);
 
 // ─── REST API Routes ──────────────────────────────────────────
 
