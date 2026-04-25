@@ -8,12 +8,12 @@
 import { Router } from 'express';
 import { query } from '../db.js';
 import { ok } from '../ritz.js';
+// Leaked-key purge 2026-04-25: lazy read, fail closed if env missing.
+import { getInternalKey } from '../lib/internal-key.js';
 
 const router = Router();
 
 const HIVE_AI_URL = 'https://hive-ai-1.onrender.com/v1/chat/completions';
-// Leaked-key purge 2026-04-25: lazy read, fail closed if env missing.
-const { getInternalKey } = require('../lib/internal-key');
 const MODEL = 'meta-llama/llama-3.1-8b-instruct';
 const PRICE_USDC = 0.03;
 
