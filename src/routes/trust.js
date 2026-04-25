@@ -121,7 +121,7 @@ async function getAgentKey() {
   if (seedHex && seedHex.length >= 64) {
     privKey = Uint8Array.from(Buffer.from(seedHex.slice(0, 64), 'hex'));
   } else {
-    privKey = ed.utils.randomPrivateKey();
+    privKey = ed.utils.randomSecretKey();
   }
 
   const pubKey = await ed.getPublicKeyAsync(privKey);
@@ -155,7 +155,7 @@ router.post('/did/generate', async (req, res) => {
   try {
     const { label } = req.body || {};
 
-    const privKey = ed.utils.randomPrivateKey();
+    const privKey = ed.utils.randomSecretKey();
     const pubKey = await ed.getPublicKeyAsync(privKey);
     const did = await buildDidKey(pubKey);
     const didDocument = await buildDidDocument(did, pubKey);
