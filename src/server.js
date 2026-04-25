@@ -39,6 +39,7 @@ import { issueServiceToken } from './services/jwt-auth.js';
 import { ritzMiddleware, ok, err } from './ritz.js';
 import trustRouter, { getAgentKey, warmTrustRegistry } from './routes/trust.js';
 import aiTrustBriefRouter from './routes/ai-brief.js';
+import cteRouter from './routes/cte.js';
 
 // ─── App Setup ────────────────────────────────────────────────
 
@@ -825,6 +826,18 @@ app.use('/v1/trust/ai', aiTrustBriefRouter);
 // ─── REST API Routes ──────────────────────────────────────────
 
 app.use('/v1', apiRouter);
+
+// ─── CTEF v0.3.1 Routes (public fixture + paid /verify) ─────
+// Public fixture — no auth required
+
+app.get('/.well-known/cte-test-vectors.json', (req, res, next) => {
+  req.url = '/cte-test-vectors.json';
+  return cteRouter(req, res, next);
+});
+
+// /verify/* — GET ?did=... is free (first per IP), POST is 10/day free then 402
+// /verify/pubkey and /verify/self-test are fully public
+app.use('/verify', cteRouter);
 
 // ─── 404 Handler ─────────────────────────────────────────────
 

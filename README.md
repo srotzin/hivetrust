@@ -281,6 +281,61 @@ X-API-Key: ht_your_api_key
 | `hivetrust_file_dispute` | Initiate a dispute resolution |
 | `hivetrust_get_platform_stats` | Retrieve platform-wide statistics |
 
+
+---
+
+## CTEF v0.3.1 Endpoint
+
+HiveTrust is the **5th canonicalizer** in the CTEF (Composable Trust Evidence Format) v0.3.1 byte-match consortium: AgentGraph + AgentID + APS + Nobulex + **HiveTrust**. Seat committed at the [2026-04-25 01:48 UTC freeze](https://github.com/a2aproject/A2A/discussions/1734).
+
+Patent applications 64/049,200 – 64/049,226, priority 2026-04-24, holder: Stephen A. Rotzin / TheHiveryIQ.
+
+### Endpoints
+
+| Route | Method | Auth | Description |
+|-------|--------|------|-------------|
+| [`/.well-known/cte-test-vectors.json`](https://hivetrust.onrender.com/.well-known/cte-test-vectors.json) | GET | Public | CTEF v0.3.1 fixture with all 4 vectors |
+| `/verify` | GET `?did=` | Free (1st/day) | HiveTrust passport tier lookup |
+| `/verify` | POST | 10/day free, then $0.01 USDC | Structural verification of a CTEF envelope |
+| `/verify/pubkey` | GET | Public | Ed25519 attestation pubkey for Apr 30 byte-match |
+| `/verify/self-test` | GET | Public | Run all 4 vectors — returns pass/fail counts |
+
+### CTEF Fixture
+
+```bash
+curl https://hivetrust.onrender.com/.well-known/cte-test-vectors.json | jq '.version'
+# "0.3.1"
+```
+
+### Structural Verification (POST /verify)
+
+```bash
+# First 10 requests/day per IP are free
+curl -X POST https://hivetrust.onrender.com/verify \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"TrustAttestation","version":"0.3.1","claim_type":"authority",...}'
+
+# Returns: { verdict: "valid"|"INVALID_CLAIM_SCOPE"|"INVALID_COMPOSITION",
+#             canonical_sha256: "...", pass: true|false }
+```
+
+Beyond 10 free requests/day, the endpoint returns HTTP 402 with an x402 payment challenge: $0.01 USDC on Base chain 8453.
+
+### Self-Test
+
+```bash
+curl https://hivetrust.onrender.com/verify/self-test | jq '.data.summary'
+```
+
+### Canonicalization
+
+All vectors use RFC 8785 JCS — implemented inline in `src/routes/cte.js`. The implementation produces byte-identical output to AgentGraph's `canonicalize_jcs_strict` for all 4 shared test vectors:
+
+- **envelope_vector** SHA-256: `9e7b5031e46de38b5f90e895113a3f24f42a4128d8d99856a2d71e529b0f0d5c`
+- **verdict_vector** SHA-256: `feb42dca4214fc46207138d676ec727d7b3d0caa1eda8c0390d2d6f6fbc28913`
+- **scope_violation_vector** SHA-256: `e584f1cd0885dc938da5fc23ce7e528715a0086e5464c9ed0f3c1c82b364026f`
+- **composition_failure_vector** SHA-256: `f9cd10bc4e8bf34ce3aa6a0e5df0d27989e54ff41c4333c69ae3ecfaf8de0cb5`
+
 ---
 
 ## Revenue Model
