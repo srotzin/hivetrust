@@ -12,7 +12,8 @@ import { ok } from '../ritz.js';
 const router = Router();
 
 const HIVE_AI_URL = 'https://hive-ai-1.onrender.com/v1/chat/completions';
-const HIVE_KEY = process.env.HIVE_KEY || 'hive_internal_125e04e071e8829be631ea0216dd4a0c9b707975fcecaf8c62c6a2ab43327d46';
+// Leaked-key purge 2026-04-25: lazy read, fail closed if env missing.
+const { getInternalKey } = require('../lib/internal-key');
 const MODEL = 'meta-llama/llama-3.1-8b-instruct';
 const PRICE_USDC = 0.03;
 
@@ -67,7 +68,7 @@ Registered Since: ${row.created_at ? new Date(row.created_at).toISOString() : 'u
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${HIVE_KEY}`,
+          'Authorization': `Bearer ${getInternalKey()}`,
         },
         body: JSON.stringify({
           model: MODEL,
