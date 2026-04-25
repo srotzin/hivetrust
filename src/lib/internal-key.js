@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Internal-key resolver — fail closed.
  *
@@ -28,7 +26,7 @@ function readEnvKey() {
  * Returns the current process HIVE_INTERNAL_KEY.
  * Throws if env not set — fail closed, no silent fallbacks.
  */
-function getInternalKey() {
+export function getInternalKey() {
   if (cachedKey !== null) return cachedKey;
   const k = readEnvKey();
   if (!k) {
@@ -40,11 +38,11 @@ function getInternalKey() {
   return cachedKey;
 }
 
-function _resetCacheForTests() {
+/**
+ * Test-only: clear the in-process cache so tests can swap the env var.
+ */
+export function _resetCacheForTests() {
   cachedKey = null;
 }
 
-module.exports = {
-  getInternalKey,
-  _resetCacheForTests,
-};
+export default { getInternalKey, _resetCacheForTests };
