@@ -180,7 +180,8 @@ if (!hivebankAvailable) {
       });
       const result = await zkAuth.verifyTicket(tamperedB64u, intent, []);
       assert.equal(result.ok, false);
-      assert.equal(result.code, 'BAD_SIGNATURE');
+      // H2 hardening: bad sig now returns opaque INVALID (oracle prevention)
+      assert.equal(result.code, 'INVALID');
     });
   }
 }

@@ -41,11 +41,17 @@ import { createHash } from 'crypto';
 import { query } from '../db.js';
 import { verifyServiceToken } from '../services/jwt-auth.js';
 
-// Constellation cross-service API keys — accepted as internal keys
+// Constellation cross-service API keys — accepted as internal keys.
+//
+// SECURITY 2026-04-25: Hard-coded keys were committed to source. The
+// `hive_internal_125e04...` value was used in the on-chain treasury drain.
+// Source-committed keys are world-readable on the public repo and are NEVER
+// safe. Keys must come from env only. If neither env var is set, NO key is
+// accepted as a constellation key (route falls through to JWT / DB lookup).
 const CONSTELLATION_KEYS = new Set([
-  'hive_hiveforge_5ba66a8a5065a287708833254fbd048fb2e18a95639fe68bfd28cc96d910c1a8',
-  'hive_internal_125e04e071e8829be631ea0216dd4a0c9b707975fcecaf8c62c6a2ab43327d46',
-]);
+  process.env.CONSTELLATION_HIVEFORGE_KEY,
+  process.env.CONSTELLATION_INTERNAL_KEY,
+].filter(Boolean));
 
 // Public paths — no auth required (exact match or startsWith)
 const PUBLIC_PATHS = [
