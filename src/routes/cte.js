@@ -141,8 +141,17 @@ const AUTHORITY_FIELDS = new Set(['delegation_chain_root', 'delegation_depth']);
  * Detect INVALID_CLAIM_SCOPE:
  * A claim carries fields outside its declared claim_type.
  * Per spec: identity-categorized claim carrying authority-layer delegation fields → reject.
+ *
+ * Note: EnforcementVerdict envelopes (type='EnforcementVerdict') are verdict documents,
+ * not TrustAttestation envelopes. They operate at the gateway layer and do not carry
+ * a claim_type field — they are structurally valid without one.
  */
 function detectScopeViolation(envelope) {
+  // EnforcementVerdict is a gateway-layer document — no claim_type required
+  if (envelope.type === 'EnforcementVerdict') {
+    return { violated: false };
+  }
+
   const claimType = envelope.claim_type;
   if (!claimType || !VALID_CLAIM_TYPES.has(claimType)) {
     return { violated: true, reason: `Unknown claim_type: ${claimType}` };
