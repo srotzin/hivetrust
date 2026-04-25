@@ -192,6 +192,8 @@ All endpoints are prefixed `/v1` unless noted. Authentication via `X-API-Key` he
 | `POST` | `/v1/insurance/claims` | File a parametric claim | Free |
 | `GET` | `/v1/insurance/claims/:id` | Get claim status and payout history | Free |
 
+> **`claim_type` namespace note:** HiveTrust's `claim_type` field (`non_delivery | fraud | sla_breach | data_loss | unauthorized_action`) is distinct from the CTEF envelope-level `claim_type` (`identity | transport | authority | continuity`) defined in [A2A CTEF v0.3.1](https://github.com/a2aproject/A2A/discussions/1734). Both tokens coexist at disjoint envelope levels — see [docs/CLAIM_TYPE_NAMESPACE.md](docs/CLAIM_TYPE_NAMESPACE.md).
+
 ### Disputes
 
 | Method | Path | Description | Cost |
