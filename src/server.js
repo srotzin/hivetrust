@@ -40,6 +40,7 @@ import { ritzMiddleware, ok, err } from './ritz.js';
 import trustRouter, { getAgentKey, warmTrustRegistry } from './routes/trust.js';
 import aiTrustBriefRouter from './routes/ai-brief.js';
 import cteRouter from './routes/cte.js';
+import spectralRouter from './routes/spectral.js';
 
 // ─── App Setup ────────────────────────────────────────────────
 
@@ -822,6 +823,7 @@ app.use('/v1/viewkey', viewkeyRouter);
 
 app.use('/v1/trust', trustRouter);
 app.use('/v1/trust/ai', aiTrustBriefRouter);
+app.use('/v1/trust/spectral', spectralRouter);
 
 // ─── REST API Routes ──────────────────────────────────────────
 
