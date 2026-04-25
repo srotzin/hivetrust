@@ -83,6 +83,10 @@ const PUBLIC_PREFIXES = [
   '/trust/issue-smsh',  // when mounted at /v1
   '/trust/score/',      // x402-gated already — auth layer should not double-gate
   '/trust/lookup',
+  '/v1/trust/schema',          // public schema documents (JSON-LD context + spec)
+  '/trust/schema',
+  '/v1/trust/vc/supermodel',   // supermodel credential issuance — free, no API key
+  '/trust/vc/supermodel',
 ];
 
 function hashKey(rawKey) {

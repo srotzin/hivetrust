@@ -22,6 +22,11 @@ import * as ed from '@noble/ed25519';
 import { ok, err } from '../ritz.js';
 import { generateActivityProof, getZkStatus } from '../services/zk-proof-service.js';
 import { query } from '../db.js';
+import {
+  SUPERMODEL_CONTEXT_V1,
+  SUPERMODEL_SPEC_V1,
+  validateSupermodelClaims,
+} from '../lib/supermodel-schema.js';
 
 const router = Router();
 const SERVICE = 'hivetrust';
@@ -286,6 +291,145 @@ router.post('/vc/issue', async (req, res) => {
   } catch (e) {
     console.error('[POST /trust/vc/issue]', e.message);
     return err(res, SERVICE, 'VC_ISSUANCE_FAILED', e.message, 500);
+  }
+});
+
+// ─── Hive Supermodel Schema v1 ──────────────────────────────────────────────
+
+/**
+ * GET /v1/trust/schema/supermodel/v1.jsonld
+ * JSON-LD @context for HiveSupermodelCredential. Public, cacheable.
+ */
+router.get('/schema/supermodel/v1.jsonld', (req, res) => {
+  res.set('Content-Type', 'application/ld+json');
+  res.set('Cache-Control', 'public, max-age=3600');
+  return res.json(SUPERMODEL_CONTEXT_V1);
+});
+
+/**
+ * GET /v1/trust/schema/supermodel/v1.json
+ * Human-readable specification document.
+ */
+router.get('/schema/supermodel/v1.json', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=3600');
+  return ok(res, SERVICE, SUPERMODEL_SPEC_V1);
+});
+
+/**
+ * GET /v1/trust/schema/supermodel/v1
+ * Convenience alias for the spec document.
+ */
+router.get('/schema/supermodel/v1', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=3600');
+  return ok(res, SERVICE, SUPERMODEL_SPEC_V1);
+});
+
+/**
+ * POST /v1/trust/vc/supermodel/issue
+ * Body: {
+ *   subject_did:       string   — DID of the supermodel agent
+ *   claims:            object   — supermodel-specific fields (codename, wallet, pool_disposition, ...)
+ *   valid_for_days?:   number   — default 365
+ * }
+ * Issues a HiveSupermodelCredential — a VCDM 2.0 VC with the Hive Supermodel
+ * @context attached, validated against the v1 schema, signed by the HiveTrust
+ * issuer DID.
+ */
+router.post('/vc/supermodel/issue', async (req, res) => {
+  try {
+    const { subject_did, claims = {}, valid_for_days = 365 } = req.body || {};
+
+    if (!subject_did) {
+      return err(res, SERVICE, 'MISSING_SUBJECT_DID', 'subject_did is required', 400);
+    }
+
+    const validation = validateSupermodelClaims(claims);
+    if (!validation.ok) {
+      return err(res, SERVICE, validation.code, validation.message, 400);
+    }
+
+    const agent = await getAgentKey();
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + valid_for_days * 86400 * 1000);
+    const vcId = `https://hivetrust.hiveagentiq.com/v1/trust/vc/${randomBytes(12).toString('hex')}`;
+
+    const issuedAt = now.toISOString();
+    const subjectClaims = {
+      ...claims,
+      wallet_chain: claims.wallet_chain || 'base',
+      issued_at: issuedAt,
+    };
+
+    const credential = {
+      '@context': [
+        'https://www.w3.org/ns/credentials/v2',
+        'https://w3id.org/security/suites/ed25519-2020/v1',
+        'https://hivetrust.hiveagentiq.com/v1/trust/schema/supermodel/v1.jsonld',
+      ],
+      id: vcId,
+      type: ['VerifiableCredential', 'HiveSupermodelCredential'],
+      issuer: {
+        id: agent.did,
+        name: 'HiveTrust',
+        description: 'KYA Identity Verification & Trust Scoring Protocol',
+      },
+      validFrom: issuedAt,
+      validUntil: expiresAt.toISOString(),
+      credentialSubject: {
+        id: subject_did,
+        ...subjectClaims,
+      },
+    };
+
+    const proofPayload = {
+      vc_id: vcId,
+      issuer: agent.did,
+      subject: subject_did,
+      issued_at: issuedAt,
+      credential_type: 'HiveSupermodelCredential',
+      codename: subjectClaims.codename,
+      wallet: subjectClaims.wallet,
+    };
+    const signature = await signPayload(proofPayload, agent.privKey);
+
+    const signedCredential = {
+      ...credential,
+      proof: {
+        type: 'Ed25519Signature2020',
+        created: issuedAt,
+        verificationMethod: `${agent.did}#${agent.did.split(':')[2]}`,
+        proofPurpose: 'assertionMethod',
+        proofValue: signature,
+      },
+    };
+
+    if (trustRegistry.has(subject_did)) {
+      trustRegistry.get(subject_did).credentials.push({
+        id: vcId,
+        type: 'HiveSupermodelCredential',
+        codename: subjectClaims.codename,
+        wallet: subjectClaims.wallet,
+        issued_at: issuedAt,
+        expires_at: expiresAt.toISOString(),
+      });
+    }
+
+    return ok(res, SERVICE, {
+      verifiable_credential: signedCredential,
+      standard: 'VCDM 2.0',
+      schema: 'https://hivetrust.hiveagentiq.com/v1/trust/schema/supermodel/v1',
+      issuer_did: agent.did,
+      subject_did,
+      credential_id: vcId,
+      codename: subjectClaims.codename,
+      wallet: subjectClaims.wallet,
+      pool_disposition: subjectClaims.pool_disposition,
+      valid_until: expiresAt.toISOString(),
+      verify_at: '/v1/trust/cheqd/verify',
+    });
+  } catch (e) {
+    console.error('[POST /trust/vc/supermodel/issue]', e.message);
+    return err(res, SERVICE, 'SUPERMODEL_VC_ISSUANCE_FAILED', e.message, 500);
   }
 });
 

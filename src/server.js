@@ -298,6 +298,10 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       'GET /v1/liquidation/listing/:listing_id',
       'GET /v1/liquidation/history',
       'GET /v1/liquidation/stats',
+      'GET /v1/trust/schema/supermodel/v1',
+      'GET /v1/trust/schema/supermodel/v1.json',
+      'GET /v1/trust/schema/supermodel/v1.jsonld',
+      'POST /v1/trust/vc/supermodel/issue',
     ],
     links: {
       docs: 'https://docs.hiveagentiq.com/hivetrust',
