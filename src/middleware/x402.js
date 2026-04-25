@@ -405,6 +405,8 @@ function isFreePath(path) {
   if (path.startsWith('/pricing')) return true;
   if (path === '/trust/wallet-attestation' || path === '/trust/zk-status') return true;
   if (path === '/trust/register' || path === '/trust/issue' || path === '/trust/issue-smsh' || path.startsWith('/trust/lookup')) return true;  // self-registration, credential issuance + public lookup are always free
+  if (path.startsWith('/trust/schema/')) return true;  // public schema documents (JSON-LD context + spec)
+  if (path.startsWith('/trust/vc/supermodel')) return true;  // Hive Supermodel credential issuance — free roster identity
   if (ORACLE_FREE_PATHS.has(path)) return true;
   if (path.startsWith('/oracle/lease/') || path.startsWith('/oracle/leases/')) return true;
   if (BOND_FREE_PATHS.has(path)) return true;

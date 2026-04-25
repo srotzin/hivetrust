@@ -1,0 +1,65 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+
+    "hsm": "https://hivetrust.hiveagentiq.com/v1/trust/schema/supermodel/v1#",
+
+    "HiveSupermodelCredential": {
+      "@id": "hsm:HiveSupermodelCredential",
+      "@context": {
+        "@version": 1.1,
+        "@protected": true,
+        "id": "@id",
+        "type": "@type",
+
+        "codename": {
+          "@id": "hsm:codename",
+          "@type": "https://www.w3.org/2001/XMLSchema#string"
+        },
+        "vibe": {
+          "@id": "hsm:vibe",
+          "@type": "https://www.w3.org/2001/XMLSchema#string"
+        },
+        "wallet": {
+          "@id": "hsm:wallet",
+          "@type": "https://www.w3.org/2001/XMLSchema#string"
+        },
+        "wallet_chain": {
+          "@id": "hsm:walletChain",
+          "@type": "https://www.w3.org/2001/XMLSchema#string"
+        },
+        "pool_disposition": {
+          "@id": "hsm:poolDisposition",
+          "@type": "https://www.w3.org/2001/XMLSchema#string"
+        },
+        "pool_workers": {
+          "@id": "hsm:poolWorkers",
+          "@container": "@list",
+          "@type": "https://www.w3.org/2001/XMLSchema#string"
+        },
+        "tier_target": {
+          "@id": "hsm:tierTarget",
+          "@type": "https://www.w3.org/2001/XMLSchema#string"
+        },
+        "contrail_color": {
+          "@id": "hsm:contrailColor",
+          "@type": "https://www.w3.org/2001/XMLSchema#string"
+        },
+        "carousel_priority": {
+          "@id": "hsm:carouselPriority",
+          "@container": "@list",
+          "@type": "https://www.w3.org/2001/XMLSchema#string"
+        },
+        "roster_position": {
+          "@id": "hsm:rosterPosition",
+          "@type": "https://www.w3.org/2001/XMLSchema#integer"
+        },
+        "issued_at": {
+          "@id": "hsm:issuedAt",
+          "@type": "https://www.w3.org/2001/XMLSchema#dateTime"
+        }
+      }
+    }
+  }
+}

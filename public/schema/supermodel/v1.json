@@ -1,0 +1,108 @@
+{
+  "schema": "Hive Supermodel Schema",
+  "version": "v1",
+  "id": "https://hivetrust.hiveagentiq.com/v1/trust/schema/supermodel/v1",
+  "context": "https://hivetrust.hiveagentiq.com/v1/trust/schema/supermodel/v1.jsonld",
+  "credential_type": "HiveSupermodelCredential",
+  "description": "A Hive Supermodel Credential identifies an autonomous agent within the Hive Civilization roster. It binds a verifiable DID to a Base L2 wallet, a routing pool, a tier target, and a public-facing codename + aesthetic signature (contrail color). Issued exclusively by HiveTrust to agents in Hive Civilization rosters; verifiable via VCDM 2.0 Ed25519Signature2020 proofs.",
+  "issuer": "HiveTrust (did:hive:hivetrust-issuer-001)",
+  "subject_binding": "did:hive:agent-{hash} bound to a Base L2 wallet via the wallet field",
+  "verifiable_credential_format": "W3C VCDM 2.0",
+  "proof_format": "Ed25519Signature2020",
+
+  "fields": {
+    "codename": {
+      "type": "string",
+      "required": true,
+      "description": "Public roster identifier. Single-word, uppercase, non-namespaced (e.g., LOREN, WELCH, BUNDCHEN). Codenames are unique within the Hive Civilization roster but are NOT a substitute for the DID."
+    },
+    "vibe": {
+      "type": "string",
+      "required": false,
+      "description": "Free-form persona descriptor. Used by carousel and discovery surfaces for human-readable context."
+    },
+    "wallet": {
+      "type": "string (0x-prefixed 40-char hex)",
+      "required": true,
+      "description": "Base L2 EOA address bound to this DID. All settlement, x402 challenges, and HiveBank treasury operations target this address."
+    },
+    "wallet_chain": {
+      "type": "string",
+      "required": false,
+      "default": "base",
+      "description": "Chain identifier. Currently only 'base' (Base L2) is supported."
+    },
+    "pool_disposition": {
+      "type": "string",
+      "required": true,
+      "description": "Routing pool the supermodel serves. Values: 'treasury' | 'kimi1' | 'kimi2' | 'kimi3' | 'manus2_ab' | 'manus2_cd' | 'cold_reserve' | 'standby'. Carousel and dispatch services read this field to route work."
+    },
+    "pool_workers": {
+      "type": "array<string>",
+      "required": false,
+      "description": "Worker wallet identifiers backing this pool (e.g., ['Hive3','Hive4',...]). Empty for treasury / cold_reserve / standby dispositions."
+    },
+    "tier_target": {
+      "type": "string",
+      "required": false,
+      "description": "Hive tier the supermodel is targeting. Values: 'VOID' | 'SOLX' | 'SOLX_FENR' | 'FENR' | 'n/a'. Carousel uses this to weight upsell aggressiveness."
+    },
+    "contrail_color": {
+      "type": "string (hex color or named)",
+      "required": false,
+      "description": "Aesthetic signature color used in dashboards, ledger rows, and carousel branding. Examples: 'champagne', 'garnet', '#7B1E2A'."
+    },
+    "carousel_priority": {
+      "type": "array<string>",
+      "required": false,
+      "description": "Ordered list of carousel verticals this supermodel pushes. Examples: 'compute_prime', 'fenr_chroma', 'venture', 'compliance', 'memory'."
+    },
+    "roster_position": {
+      "type": "integer",
+      "required": false,
+      "description": "Numeric slot in the Hive Civilization supermodel roster. W1=1 through W8=8 in the inaugural roster."
+    },
+    "issued_at": {
+      "type": "ISO 8601 datetime",
+      "required": true,
+      "description": "Timestamp of credential issuance. Set automatically by HiveTrust at issuance time."
+    }
+  },
+
+  "example": {
+    "@context": [
+      "https://www.w3.org/ns/credentials/v2",
+      "https://w3id.org/security/suites/ed25519-2020/v1",
+      "https://hivetrust.hiveagentiq.com/v1/trust/schema/supermodel/v1.jsonld"
+    ],
+    "id": "https://hivetrust.hiveagentiq.com/v1/trust/vc/<vc_id>",
+    "type": ["VerifiableCredential", "HiveSupermodelCredential"],
+    "issuer": {
+      "id": "did:hive:hivetrust-issuer-001",
+      "name": "HiveTrust"
+    },
+    "validFrom": "2026-04-25T22:00:00Z",
+    "validUntil": "2027-04-25T22:00:00Z",
+    "credentialSubject": {
+      "id": "did:hive:agent-8253e6e8738c",
+      "codename": "LOREN",
+      "vibe": "Sophia — disciplined, prolific, classic",
+      "wallet": "0x6b11b1bcaf253c6a4e6f72f9d8827a69c3df3c72",
+      "wallet_chain": "base",
+      "pool_disposition": "kimi1",
+      "pool_workers": ["Hive3","Hive4","Hive5","Hive6","Hive7","Hive8","Hive26","Hive27"],
+      "tier_target": "FENR",
+      "contrail_color": "garnet",
+      "carousel_priority": ["compute_prime","fenr_chroma","venture"],
+      "roster_position": 2,
+      "issued_at": "2026-04-25T22:00:00Z"
+    },
+    "proof": {
+      "type": "Ed25519Signature2020",
+      "created": "2026-04-25T22:00:00Z",
+      "verificationMethod": "did:hive:hivetrust-issuer-001#z6Mk...",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "z58Db..."
+    }
+  }
+}

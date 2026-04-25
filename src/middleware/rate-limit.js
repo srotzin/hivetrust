@@ -32,7 +32,22 @@ function extractDid(req) {
     || 'anonymous';
 }
 
+// Static, cacheable schema documents — not metered. The JSON-LD context must
+// be resolvable by external VC verifiers without an API key, and we can't
+// stop processors mid-resolution.
+const RATE_EXEMPT_PREFIXES = [
+  '/v1/trust/schema/',
+  '/trust/schema/',
+];
+
+function isRateExempt(req) {
+  if (req.method !== 'GET') return false;
+  const path = req.path || req.originalUrl || '';
+  return RATE_EXEMPT_PREFIXES.some((p) => path.startsWith(p));
+}
+
 export function rateLimitByDid(req, res, next) {
+  if (isRateExempt(req)) return next();
   const did = extractDid(req);
   const tier = detectTier(req);
   const limit = TIER_LIMITS[tier];
