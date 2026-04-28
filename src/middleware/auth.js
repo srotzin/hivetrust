@@ -57,6 +57,8 @@ const CONSTELLATION_KEYS = new Set([
 const PUBLIC_PATHS = [
   '/health',
   '/.well-known/hivetrust.json',
+  '/.well-known/mcp.json',
+  '/mcp',                     // MCP discovery + initialize + tools/list (tools/call still gated inside handler)
 ];
 
 // Public path prefixes — checked with and without /v1 prefix

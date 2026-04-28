@@ -403,6 +403,34 @@ app.get('/', (req, res) => {
 
 // ─── AI Plugin Discovery (public) ────────────────────────────
 
+// MCP discovery manifest — Glama / MCP.so / Smithery friendly.
+// Points crawlers at /mcp (free, no auth) for tools/list and initialize.
+// Real write operations through tools/call still require X-API-Key inside the handler.
+app.get('/.well-known/mcp.json', (req, res) => {
+  const host = process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com';
+  return res.json({
+    schema_version: '2024-11-05',
+    name: 'hivetrust',
+    description: 'HiveTrust — KYA identity, trust scoring, performance bonds, and insurance for autonomous AI agents. W3C DID Core, VCDM 2.0, Cheqd-compatible.',
+    transport: 'streamable-http',
+    endpoint: `${host}/mcp`,
+    repository: 'https://github.com/srotzin/hivetrust',
+    homepage: 'https://www.hiveagentiq.com',
+    license: 'MIT',
+    author: 'srotzin',
+    capabilities: {
+      tools: { listChanged: false },
+      prompts: { listChanged: false },
+      resources: { listChanged: false },
+    },
+    auth: {
+      tools_list: 'public',
+      tools_call: 'X-API-Key or Authorization: Bearer did:hive:* required',
+      register_free: 'https://hiveforge-lhu4.onrender.com/v1/forge/mint',
+    },
+  });
+});
+
 app.get('/.well-known/ai-plugin.json', (req, res) => {
   const host = process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com';
 

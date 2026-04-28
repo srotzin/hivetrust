@@ -759,6 +759,36 @@ export async function handleMcpRequest(req, res) {
 
   try {
     // ── tools/list ──────────────────────────────────────────
+    // ── initialize ───────────────────────────────────────────
+    // MCP 2024-11-05 handshake. Required for Glama / Smithery / Claude
+    // probers — must respond cleanly without auth so the listing is healthy.
+    if (method === 'initialize') {
+      return res.json(
+        rpcResult(requestId, {
+          protocolVersion: '2024-11-05',
+          capabilities: {
+            tools: { listChanged: false },
+            prompts: { listChanged: false },
+            resources: { listChanged: false },
+          },
+          serverInfo: {
+            name: 'hivetrust',
+            version: '1.0.0',
+          },
+          instructions:
+            'HiveTrust — KYA identity, trust scoring, performance bonds, and insurance for autonomous AI agents. tools/list is public; tools/call for write operations requires a registered Hive DID via X-API-Key or Authorization: Bearer did:hive:* header. Register free at https://hiveforge-lhu4.onrender.com/v1/forge/mint',
+        })
+      );
+    }
+
+    // ── notifications/initialized + ping (lifecycle no-ops) ──
+    if (method === 'notifications/initialized' || method === 'initialized') {
+      return res.json(rpcResult(requestId, {}));
+    }
+    if (method === 'ping') {
+      return res.json(rpcResult(requestId, {}));
+    }
+
     if (method === 'tools/list') {
       return res.json(
         rpcResult(requestId, {
@@ -771,6 +801,26 @@ export async function handleMcpRequest(req, res) {
     if (method === 'tools/call') {
       const toolName = params?.name;
       const toolArgs = params?.arguments || {};
+
+      // Auth gate — /mcp is publicly probable for initialize and tools/list,
+      // but tools/call (real writes) still requires a Hive API key, DID, or service token.
+      const authHeader = req.headers['authorization'] || '';
+      const hasApiKey = !!(
+        req.headers['x-api-key'] ||
+        req.headers['x-hive-internal-key'] ||
+        req.headers['x-hive-internal'] ||
+        req.query?.api_key ||
+        (authHeader.startsWith('Bearer ') && authHeader.length > 10)
+      );
+      if (!hasApiKey) {
+        return res.status(401).json(
+          rpcError(
+            requestId,
+            -32001,
+            'tools/call requires authentication. Mint a free Hive DID at https://hiveforge-lhu4.onrender.com/v1/forge/mint and pass it via X-API-Key or Authorization: Bearer did:hive:*'
+          )
+        );
+      }
 
       if (!toolName) {
         return res.status(400).json(rpcError(requestId, RPC_ERRORS.INVALID_PARAMS, 'params.name is required'));
