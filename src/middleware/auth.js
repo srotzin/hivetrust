@@ -95,9 +95,20 @@ function hashKey(rawKey) {
   return createHash('sha256').update(rawKey).digest('hex');
 }
 
-function isPublicPath(path) {
-  if (PUBLIC_PATHS.includes(path)) return true;
-  return PUBLIC_PREFIXES.some((prefix) => path.startsWith(prefix));
+function isPublicPath(path, originalUrl) {
+  // Check both req.path and req.originalUrl — Express strips mount prefix
+  // from req.path inside middleware mounted via app.use('/mcp', ...).
+  const candidates = [path];
+  if (originalUrl) {
+    // Strip query string from originalUrl
+    const cleanUrl = originalUrl.split('?')[0];
+    candidates.push(cleanUrl);
+  }
+  for (const p of candidates) {
+    if (PUBLIC_PATHS.includes(p)) return true;
+    if (PUBLIC_PREFIXES.some((prefix) => p.startsWith(prefix))) return true;
+  }
+  return false;
 }
 
 /**
@@ -105,7 +116,7 @@ function isPublicPath(path) {
  */
 export default async function authMiddleware(req, res, next) {
   // Skip auth for public endpoints
-  if (isPublicPath(req.path)) {
+  if (isPublicPath(req.path, req.originalUrl)) {
     return next();
   }
 
