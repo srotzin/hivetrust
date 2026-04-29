@@ -63,6 +63,8 @@ const PUBLIC_PATHS = [
 
 // Public path prefixes — checked with and without /v1 prefix
 const PUBLIC_PREFIXES = [
+  '/v1/identity/',   // Identity passport — handles its own payment gating (BOGO/x402/enterprise)
+  '/identity/',      // same without /v1 prefix
   '/v1/verify_agent_risk',
   '/v1/stats',
   '/v1/pricing',
