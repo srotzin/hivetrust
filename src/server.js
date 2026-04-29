@@ -625,22 +625,29 @@ function agentCardHandler(req, res) {
       currency: 'USDC',
       network: 'base',
       address: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e',
-    },
-    extensions: {
-      hive_pricing: {
-        currency: 'USDC',
-        network: 'base',
-        model: 'per_call',
-        first_call_free: true,
-        loyalty_threshold: 6,
-        loyalty_message: 'Every 6th paid call is free'
-      }
+      secondary_rails: [
+        { currency: 'USDT', network: 'base',    address: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e' },
+        { currency: 'USDC', network: 'solana',  address: 'B1N61cuL35fhskWz5dw8XqDyP6LWi3ZWmq8CNA9L3FVn' },
+      ],
+      fee_schedule: {
+        did_issuance:         { endpoint: 'POST /v1/trust/did/generate',             amount_usdc: 1.00,  model: 'per_did',    note: 'One-time per new did:web:* registered' },
+        vc_issuance:          { endpoint: 'POST /v1/trust/vc/issue',                 amount_usdc: 0.50,  model: 'per_vc',     note: 'Per Verifiable Credential issued (VCDM 2.0)' },
+        credential_issue:     { endpoint: 'POST /v1/agents/:id/credentials',         amount_usdc: 0.10,  model: 'per_event',  note: 'Per credential lifecycle event (issue)' },
+        credential_revoke:    { endpoint: 'DELETE /v1/agents/:id/credentials/:cid',  amount_usdc: 0.10,  model: 'per_event',  note: 'Per revocation event' },
+        reputation_proof:     { endpoint: 'POST /v1/trust/reputation/proof',         amount_usdc: 0.10,  model: 'per_proof',  note: 'Signed portable reputation proof' },
+        trust_score_read:     { endpoint: 'GET /v1/trust/score/:did',                amount_usdc: 0.10,  model: 'per_lookup', note: 'Enterprise-tier attested trust score (basic lookup free via hive-meter)' },
+        oracle_lease:         { endpoint: 'POST /v1/oracle/create-lease',            amount_usdc: '0.25-2.50', model: 'per_lease', note: '5 data streams; 24h-168h durations' },
+        enterprise_sub:       { endpoint: 'POST /v1/enterprise/subscribe',           amount_usdc: 500.00, model: 'monthly',   note: 'Batched DID issuance + audit logs; USDC monthly settlement' },
+        bogo_first_call_free: { note: 'First call free — add x-hive-did header to claim' },
+        bogo_loyalty:         { note: 'Every 6th paid call free (loyalty threshold: 6)' },
+      },
     },
     bogo: {
       first_call_free: true,
       loyalty_threshold: 6,
       pitch: "Pay this once, your 6th paid call is on the house. New here? Add header 'x-hive-did' to claim your first call free.",
-      claim_with: 'x-hive-did header'
+      claim_with: 'x-hive-did header',
+      receipt_chain: 'Every fee event auto-emits a Spectral-signed receipt — verify at GET /v1/trust/receipts/:id or POST https://hive-receipt.onrender.com/v1/receipts/verify',
     },
     standards: {
       w3c_did_core: true,

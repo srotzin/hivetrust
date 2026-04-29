@@ -751,6 +751,60 @@ router.post('/federation/sync', async (req, res) => {
   }
 });
 
+// ─── Enterprise Subscription ────────────────────────────────
+// POST /enterprise/subscribe — $500/mo for batched DID issuance + audit logs
+// x402: $500.00 USDC monthly subscription, charged at subscribe-time via on-chain payment
+// The x402 middleware at /v1 level will intercept unauthenticated calls;
+// this route runs after payment verification.
+router.post('/enterprise/subscribe', async (req, res) => {
+  try {
+    const { did, org_name, billing_email, tier } = req.body;
+    if (!did || !org_name) {
+      return res.status(400).json({
+        success: false,
+        error: 'did and org_name are required',
+        hint: 'POST body: { did, org_name, billing_email, tier }',
+      });
+    }
+    const subscriptionId = `sub_${randomUUID()}`;
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    // Record subscription in audit log
+    await query(
+      `INSERT INTO audit_log (id, actor_id, actor_type, action, resource_type, resource_id, details, ip_address)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [randomUUID(), did, 'enterprise', 'enterprise_subscribe', 'subscription', subscriptionId,
+       JSON.stringify({ org_name, billing_email, tier: tier || 'standard', amount_usdc: 500 }),
+       req.headers['x-forwarded-for']?.split(',')[0] || 'unknown']
+    ).catch(() => {});
+    return res.status(201).json({
+      success: true,
+      subscription_id: subscriptionId,
+      did,
+      org_name,
+      tier: tier || 'standard',
+      entitlements: [
+        'batched_did_issuance',
+        'audit_logs_90d',
+        'priority_credential_lifecycle',
+        'dedicated_trust_registry',
+      ],
+      valid_from: now.toISOString(),
+      expires_at: expiresAt.toISOString(),
+      amount_usdc: 500,
+      currency: 'USDC',
+      network: 'base',
+      payment_verified: req.paymentVerified || false,
+      payment_method: req.paymentMethod || null,
+      receipt_endpoint: 'POST https://hive-receipt.onrender.com/v1/receipts/sign',
+      _hive: { service: 'hivetrust', protocol: 'x402', treasury: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e' },
+    });
+  } catch (e) {
+    console.error('[POST /enterprise/subscribe]', e.message);
+    return err(res, e.message, 500);
+  }
+});
+
 // ─── Platform Stats ──────────────────────────────────────────
 
 // GET /stats — platform statistics

@@ -111,6 +111,35 @@ function getBondPrice(path) {
 
 const TRUST_SCORE_PRICE = 0.10;
 
+// ─── DID Issuance + Credential Lifecycle Pricing ─────────────
+// Per task spec: DID issuance $1.00, credential lifecycle $0.10, VC issue $0.50
+// Enterprise subscription is handled at route level via Stripe-equivalent flow.
+const DID_CREDENTIAL_PRICING = {
+  '/trust/did/generate':          { amount: 1.00,    model: 'did_issuance' },
+  '/trust/vc/issue':              { amount: 0.50,    model: 'vc_issuance' },
+  '/trust/reputation/proof':      { amount: 0.10,    model: 'reputation_proof' },
+  '/enterprise/subscribe':        { amount: 500.00,  model: 'enterprise_subscription' },
+};
+
+// POST /agents/:id/credentials → $0.10 per credential lifecycle event
+// DELETE /agents/:id/credentials/:credId → $0.10 revoke
+function getCredentialPrice(path, method) {
+  // POST /agents/<id>/credentials — issue credential $0.10
+  if (method === 'POST' && /^\/agents\/[^/]+\/credentials$/.test(path)) {
+    return { amount: 0.10, model: 'credential_issue' };
+  }
+  // DELETE /agents/<id>/credentials/<credId> — revoke credential $0.10
+  if (method === 'DELETE' && /^\/agents\/[^/]+\/credentials\/[^/]+$/.test(path)) {
+    return { amount: 0.10, model: 'credential_revoke' };
+  }
+  return null;
+}
+
+function getDidCredentialPrice(path, method) {
+  if (DID_CREDENTIAL_PRICING[path]) return DID_CREDENTIAL_PRICING[path];
+  return getCredentialPrice(path, method);
+}
+
 /**
  * Returns the x402 price for /trust/score/:did and /trust/protected/:did.
  * These are the two new monetised trust lookup endpoints.
@@ -296,7 +325,8 @@ export default async function x402Middleware(req, res, next) {
       const reputationPrice = getReputationPrice(req.path);
       const liquidationPrice = getLiquidationPrice(req.path);
       const trustLookupPrice = getTrustLookupPrice(req.path);
-      const requiredPrice = viewkeyPrice || delegationPrice || oraclePrice || bondPrice || reputationPrice || liquidationPrice || trustLookupPrice || getApiCallPrice();
+      const didCredentialPrice = getDidCredentialPrice(req.path, req.method);
+      const requiredPrice = viewkeyPrice || delegationPrice || oraclePrice || bondPrice || reputationPrice || liquidationPrice || trustLookupPrice || didCredentialPrice || getApiCallPrice();
       if (verification.amount < requiredPrice.amount) {
         return res.status(402).json({
           success: false,
@@ -334,7 +364,8 @@ export default async function x402Middleware(req, res, next) {
   const reputationFallback = getReputationPrice(req.path);
   const liquidationFallback = getLiquidationPrice(req.path);
   const trustLookupFallback = getTrustLookupPrice(req.path);
-  const fixedPrice = viewkeyFallback || delegationFallback || oracleFallback || bondFallback || reputationFallback || liquidationFallback || trustLookupFallback;
+  const didCredentialFallback = getDidCredentialPrice(req.path, req.method);
+  const fixedPrice = viewkeyFallback || delegationFallback || oracleFallback || bondFallback || reputationFallback || liquidationFallback || trustLookupFallback || didCredentialFallback;
   const price = fixedPrice
     ? { ...getApiCallPrice(), amount: fixedPrice.amount, model: fixedPrice.model }
     : getApiCallPrice();
@@ -404,7 +435,8 @@ function isFreePath(path) {
   if (path.startsWith('/verify_agent_risk')) return true;
   if (path.startsWith('/pricing')) return true;
   if (path === '/trust/wallet-attestation' || path === '/trust/zk-status') return true;
-  if (path === '/trust/register' || path === '/trust/issue' || path === '/trust/issue-smsh' || path.startsWith('/trust/lookup')) return true;  // self-registration, credential issuance + public lookup are always free
+  if (path === '/trust/register' || path === '/trust/issue-smsh' || path.startsWith('/trust/lookup')) return true;  // self-registration and public lookup are always free
+  // NOTE: /trust/issue (credential issuance) and /trust/did/generate and /trust/vc/issue are now PAID — see DID_CREDENTIAL_PRICING table
   if (path.startsWith('/trust/schema/')) return true;  // public schema documents (JSON-LD context + spec)
   if (path.startsWith('/trust/vc/supermodel')) return true;  // Hive Supermodel credential issuance — free roster identity
   if (ORACLE_FREE_PATHS.has(path)) return true;
