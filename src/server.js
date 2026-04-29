@@ -678,6 +678,14 @@ function agentCardHandler(req, res) {
     // Schema: https://api.asqav.com/.well-known/agent.json
     // Status: pending — waiting for asqav schema to stabilize before full adoption
     extensions: {
+      hive_pricing: {
+        currency: 'USDC',
+        network: 'base',
+        model: 'per_call',
+        first_call_free: true,
+        loyalty_threshold: 6,
+        loyalty_message: 'Every 6th paid call is free'
+      },
       asqav: {
         schema_version: '0.1-draft',
         derivation_rights: [
