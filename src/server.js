@@ -23,6 +23,7 @@ import rateLimiter from './middleware/rate-limiter.js';
 import { rateLimitByDid } from './middleware/rate-limit.js';
 import authMiddleware from './middleware/auth.js';
 import x402Middleware from './middleware/x402.js';
+import mppMiddleware from './middleware/mpp.js';
 import auditLogger from './middleware/audit-logger.js';
 import apiRouter from './routes/api.js';
 import pricingRouter from './routes/pricing.js';
@@ -69,7 +70,7 @@ app.use(
   cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Payment-Hash', 'X-Subscription-Id', 'X-Hive-Internal-Key'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Payment-Hash', 'X-Subscription-Id', 'X-Hive-Internal-Key', 'Payment', 'Payment-Credential', 'X-Payment', 'X-Mpp-Rail', 'X-Mpp-Amount'],
     exposedHeaders: [
       'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset', 'Retry-After',
       'X-Payment-Amount', 'X-Payment-Currency', 'X-Payment-Network', 'X-Payment-Address',
@@ -931,10 +932,19 @@ app.use('/mcp', authMiddleware);
 app.use('/v1', auditLogger);
 app.use('/mcp', auditLogger);
 
-// ─── x402 Payment Middleware (after auth, before routes) ──────
-// Gates paid endpoints behind x402 protocol (USDC on Base L2)
+// ─── Payment Middleware — rail-agnostic (x402 + MPP) ───────────
+// Both rails intercept the same routes. Either rail satisfies payment.
+// x402: X-Payment-Hash header (USDC on Base L2)
+// MPP:  Payment header (IETF draft-ryan-httpauth-payment) — Tempo or Base USDC
+//
+// Middleware chain: x402 runs first; if MPP Payment header is present and
+// x402 is not satisfied, mppMiddleware handles verification and grants access.
+// WWW-Authenticate advertises both rails on every 402 response.
 
 app.use('/v1', x402Middleware);
+
+// MPP rail — runs after x402, grants access via MPP Payment header
+app.use('/v1', mppMiddleware);
 
 // ─── Pricing Routes (public, no payment required) ─────────────
 

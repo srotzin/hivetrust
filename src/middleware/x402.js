@@ -370,6 +370,13 @@ export default async function x402Middleware(req, res, next) {
     ? { ...getApiCallPrice(), amount: fixedPrice.amount, model: fixedPrice.model }
     : getApiCallPrice();
 
+  // WWW-Authenticate advertises BOTH rails: x402 and MPP
+  // IETF draft-ryan-httpauth-payment Payment header scheme for MPP rail
+  res.set('WWW-Authenticate', [
+    `x402 realm="hivetrust", amount="${price.amount}", currency="USDC", network="base", address="${PAYMENT_ADDRESS}"`,
+    `Payment scheme="mpp", realm="hivetrust", amount="${price.amount}", currency="USDC", network="tempo", address="${PAYMENT_ADDRESS}"`,
+  ].join(', '));
+
   res.set({
     'X-Payment-Amount': price.amount.toString(),
     'X-Payment-Currency': 'USDC',
@@ -412,10 +419,19 @@ export default async function x402Middleware(req, res, next) {
       ceiling: price.ceiling,
     },
     how_to_pay: {
-      step_1: `Send ${price.amount} USDC to ${PAYMENT_ADDRESS} on Base (chain ID 8453)`,
-      step_2: 'Include the transaction hash in the X-Payment-Hash header',
-      step_3: 'Retry this request — payment is verified on-chain automatically',
+      rail_x402: {
+        step_1: `Send ${price.amount} USDC to ${PAYMENT_ADDRESS} on Base (chain ID 8453)`,
+        step_2: 'Include the transaction hash in the X-Payment-Hash header',
+        step_3: 'Retry this request — payment is verified on-chain automatically',
+      },
+      rail_mpp: {
+        step_1: `Send ${price.amount} USDCe to ${PAYMENT_ADDRESS} on Tempo (or Base)`,
+        step_2: 'Include in Payment header: scheme="mpp", tx_hash="0x...", rail="tempo"',
+        step_3: 'Retry request — MPP payment verified on-chain via Tempo RPC',
+        tempo_rpc: 'https://rpc.tempo.xyz',
+      },
     },
+    rails_accepted: ['x402', 'mpp'],
     subscription_tiers: {
       citizen:     { usdc_onetime: 49,   calls: '100/day',       label: 'Citizen Pass' },
       pro:         { usdc_monthly: 149,  calls: '10,000/month',  label: 'Pro Operator' },
