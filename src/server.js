@@ -41,6 +41,7 @@ import trustRouter, { getAgentKey, warmTrustRegistry } from './routes/trust.js';
 import aiTrustBriefRouter from './routes/ai-brief.js';
 import cteRouter from './routes/cte.js';
 import spectralRouter from './routes/spectral.js';
+import passportRouter from './routes/passport.js';
 
 // ─── App Setup ────────────────────────────────────────────────
 
@@ -819,6 +820,59 @@ app.post('/v1/auth/service-token', async (req, res) => {
   }
 });
 
+// ─── Issuer DID document (public) — references passport signing key ─
+// Complies with W3C DID Core; consumed by verifiers of the passport envelope.
+
+app.get('/.well-known/did.json', async (req, res) => {
+  // W3C DID document for the hive:trust issuer (passport signing key).
+  // Verifiers use this to check ed25519 signatures on passport envelopes.
+  try {
+    const ed = await import('@noble/ed25519');
+    const { createHash } = await import('crypto');
+    const host = process.env.HIVETRUST_HOST || 'https://hivetrust.onrender.com';
+    const USDC_CONTRACT_DID = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
+    const seedHex = process.env.SERVER_DID_SEED || process.env.PASSPORT_SIGNING_SEED;
+    const anchor = process.env.HIVE_INTERNAL_KEY || 'hive-passport-issuer-2026';
+    const privKey = seedHex && seedHex.length >= 64
+      ? Uint8Array.from(Buffer.from(seedHex.slice(0, 64), 'hex'))
+      : Uint8Array.from(createHash('sha256').update(anchor + '-passport-signing-key').digest());
+    const pubKey = await ed.getPublicKeyAsync(privKey);
+    const pubKeyHex = Buffer.from(pubKey).toString('hex');
+    const pubKeyB64u = Buffer.from(pubKey).toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+    return res.json({
+      '@context': [
+        'https://www.w3.org/ns/did/v1',
+        'https://w3id.org/security/suites/ed25519-2020/v1',
+      ],
+      id: 'did:hive:trust',
+      verificationMethod: [{
+        id: 'did:hive:trust#passport-signing-key-2026',
+        type: 'Ed25519VerificationKey2020',
+        controller: 'did:hive:trust',
+        publicKeyHex: pubKeyHex,
+        publicKeyBase64url: pubKeyB64u,
+      }],
+      authentication: ['did:hive:trust#passport-signing-key-2026'],
+      assertionMethod: ['did:hive:trust#passport-signing-key-2026'],
+      service: [{
+        id: 'did:hive:trust#passport',
+        type: 'PassportService',
+        serviceEndpoint: `${host}/v1/identity/{did}/passport`,
+      }],
+      _hive: {
+        brand: '#C08D23',
+        treasury: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e',
+        usdc_contract: USDC_CONTRACT_DID,
+        network: 'base',
+        spec: 'hive-passport-v1',
+      },
+    });
+  } catch (e) {
+    console.error('[GET /.well-known/did.json]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── W3C DID Configuration (public, domain verification) ────
 // Spec: https://identity.foundation/.well-known/resources/did-configuration/
 
@@ -919,6 +973,14 @@ app.use('/v1/viewkey', viewkeyRouter);
 app.use('/v1/trust', trustRouter);
 app.use('/v1/trust/ai', aiTrustBriefRouter);
 app.use('/v1/trust/spectral', spectralRouter);
+
+// ─── Identity Passport (moat surface) ────────────────────────
+// GET /v1/identity/:did/passport — signed aggregate credential graph
+// POST /v1/identity/passport/subscribe — enterprise tier $2,000/mo
+// The passport route handles its own payment gating internally
+// (BOGO first-call-free, x402 $0.25/read, enterprise unlimited)
+
+app.use('/v1/identity', passportRouter);
 
 // ─── REST API Routes ──────────────────────────────────────────
 

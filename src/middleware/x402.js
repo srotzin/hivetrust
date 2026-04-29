@@ -434,6 +434,8 @@ function isFreePath(path) {
   if (EXEMPT_ENDPOINTS.has(path)) return true;
   if (path.startsWith('/verify_agent_risk')) return true;
   if (path.startsWith('/pricing')) return true;
+  // Identity passport handles its own BOGO/x402/enterprise gating internally
+  if (path.startsWith('/identity/')) return true;
   if (path === '/trust/wallet-attestation' || path === '/trust/zk-status') return true;
   if (path === '/trust/register' || path === '/trust/issue-smsh' || path.startsWith('/trust/lookup')) return true;  // self-registration and public lookup are always free
   // NOTE: /trust/issue (credential issuance) and /trust/did/generate and /trust/vc/issue are now PAID — see DID_CREDENTIAL_PRICING table
