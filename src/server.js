@@ -89,6 +89,77 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 app.use(rateLimiter);
 
+// ─── MPP OpenAPI Discovery (public) ────────────────────────
+// Required for MPPScan auto-discovery and mppx compatibility
+// x-mpp extensions follow tempoxyz/mpp schemas/services.ts format
+
+app.get('/openapi.json', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json({
+    openapi: '3.0.3',
+    info: {
+      title: 'HiveTrust — KYA Identity & Trust API',
+      version: '1.0.0',
+      description: 'DID-federated trust score, Spectral receipts, and identity passport for MPP-paying agents. Accepts x402 and MPP rails.',
+      contact: { name: 'Hive Civilization', url: 'https://thehiveryiq.com', email: 'steve@thehiveryiq.com' },
+    },
+    servers: [{ url: 'https://hivetrust.onrender.com' }],
+    'x-mpp': {
+      realm: 'hivetrust.onrender.com',
+      payment: { method: 'tempo', currency: '0x20c000000000000000000000b9537d11c60e8b50', decimals: 6, recipient: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e' },
+      rails: ['x402', 'mpp'],
+      categories: ['identity', 'trust'],
+      integration: 'first-party',
+      tags: ['did', 'trust-score', 'identity-passport', 'verifiable-credentials', 'spectral-receipts', 'kya', 'agent-kyc'],
+      treasury: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e',
+    },
+    paths: {
+      '/v1/trust/score/{did}': {
+        get: {
+          summary: 'Trust score lookup',
+          description: 'Retrieve Hive trust score (0-100) for a DID. $0.10 USDC per call.',
+          'x-mpp-charge': { amount: '100000', intent: 'charge' },
+          parameters: [{ name: 'did', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: 'Trust score' }, '402': { description: 'Payment required — x402 or MPP' } },
+        },
+      },
+      '/v1/trust/did/generate': {
+        post: {
+          summary: 'DID issuance',
+          description: 'Issue a new DID for an agent. $1.00 USDC.',
+          'x-mpp-charge': { amount: '1000000', intent: 'charge' },
+          responses: { '200': { description: 'DID generated' }, '402': { description: 'Payment required' } },
+        },
+      },
+      '/v1/trust/vc/issue': {
+        post: {
+          summary: 'VC issuance',
+          description: 'Issue a verifiable credential. $0.50 USDC.',
+          'x-mpp-charge': { amount: '500000', intent: 'charge' },
+          responses: { '200': { description: 'VC issued' }, '402': { description: 'Payment required' } },
+        },
+      },
+      '/v1/identity/{did}/passport': {
+        get: {
+          summary: 'Identity passport',
+          description: 'Signed identity passport aggregate. $0.25 USDC.',
+          'x-mpp-charge': { amount: '250000', intent: 'charge' },
+          parameters: [{ name: 'did', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: 'Identity passport' }, '402': { description: 'Payment required' } },
+        },
+      },
+      '/v1/trust/reputation/proof': {
+        get: {
+          summary: 'Reputation proof',
+          description: 'Signed reputation proof. $0.10 USDC.',
+          'x-mpp-charge': { amount: '100000', intent: 'charge' },
+          responses: { '200': { description: 'Reputation proof' }, '402': { description: 'Payment required' } },
+        },
+      },
+    },
+  });
+});
+
 // ─── Health Check (public, before auth) ──────────────────────
 
 app.get('/health', async (req, res) => {
