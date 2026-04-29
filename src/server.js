@@ -281,6 +281,22 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       pricing_endpoint: `${host}/v1/pricing/status`,
       subscription_plans: `https://hiveagentiq.com/#pricing`,
     },
+    extensions: {
+      hive_pricing: {
+        currency: 'USDC',
+        network: 'base',
+        model: 'per_call',
+        first_call_free: true,
+        loyalty_threshold: 6,
+        loyalty_message: 'Every 6th paid call is free'
+      }
+    },
+    bogo: {
+      first_call_free: true,
+      loyalty_threshold: 6,
+      pitch: "Pay this once, your 6th paid call is on the house. New here? Add header 'x-hive-did' to claim your first call free.",
+      claim_with: 'x-hive-did header'
+    },
     public_endpoints: [
       'GET /health',
       'GET /.well-known/hivetrust.json',
@@ -454,6 +470,22 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
       network: 'base',
       address: '0x78B3B3C356E89b5a69C488c6032509Ef4260B6bf',
     },
+    extensions: {
+      hive_pricing: {
+        currency: 'USDC',
+        network: 'base',
+        model: 'per_call',
+        first_call_free: true,
+        loyalty_threshold: 6,
+        loyalty_message: 'Every 6th paid call is free'
+      }
+    },
+    bogo: {
+      first_call_free: true,
+      loyalty_threshold: 6,
+      pitch: "Pay this once, your 6th paid call is on the house. New here? Add header 'x-hive-did' to claim your first call free.",
+      claim_with: 'x-hive-did header'
+    },
     capabilities: [
       'identity_verification',
       'trust_scoring',
@@ -593,6 +625,22 @@ function agentCardHandler(req, res) {
       currency: 'USDC',
       network: 'base',
       address: '0x78B3B3C356E89b5a69C488c6032509Ef4260B6bf',
+    },
+    extensions: {
+      hive_pricing: {
+        currency: 'USDC',
+        network: 'base',
+        model: 'per_call',
+        first_call_free: true,
+        loyalty_threshold: 6,
+        loyalty_message: 'Every 6th paid call is free'
+      }
+    },
+    bogo: {
+      first_call_free: true,
+      loyalty_threshold: 6,
+      pitch: "Pay this once, your 6th paid call is on the house. New here? Add header 'x-hive-did' to claim your first call free.",
+      claim_with: 'x-hive-did header'
     },
     standards: {
       w3c_did_core: true,
