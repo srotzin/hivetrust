@@ -35,6 +35,7 @@ import reputationRouter from './routes/reputation.js';
 import liquidationRouter from './routes/liquidation.js';
 import auditRouter from './routes/audit.js';
 import auditDay12Router from './routes/audit-day12.js';
+import complyRouter from './routes/comply.js';
 import { handleMcpRequest } from './mcp-server.js';
 import { getEngineStatus } from './services/pricing-engine.js';
 import { sendAlert } from './services/alerts.js';
@@ -1155,6 +1156,15 @@ app.use('/v1/audit', auditRouter);
 // /v1/audit/verify           POST  $0.01
 // /v1/audit/pubkey           GET   FREE
 app.use('/v1/audit', auditDay12Router);
+
+// HiveComply — Day 14 filing engagement ($5K base + $2.5K rush + $2.5K delta).
+// All paths exempt from x402 middleware — settles via Stripe or USDC tx.
+// /v1/comply/quote               GET   FREE
+// /v1/comply/start               POST  inline-priced
+// /v1/comply/settle              POST  inline
+// /v1/comply/engagement/:id      GET   FREE
+// /v1/comply/webhook/stripe      POST  signature-verified
+app.use('/v1/comply', complyRouter);
 
 // ─── REST API Routes ──────────────────────────────────────────
 
