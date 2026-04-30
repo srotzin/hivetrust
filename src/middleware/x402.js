@@ -140,6 +140,21 @@ function getDidCredentialPrice(path, method) {
   return getCredentialPrice(path, method);
 }
 
+// HiveCredential v1 — institutional surface (AUTHENTICATABLE pillar)
+// POST /credential/issue   $0.10 USDC  — issue scoped credential
+// POST /credential/verify  $0.01 USDC  — verify cred + active scope
+// POST /credential/scope   $0.05 USDC  — narrow / freeze / unfreeze / revoke
+// GET  /credential/pubkey  FREE        — see isFreePath()
+const HIVE_CREDENTIAL_PRICING = {
+  '/credential/issue':  { amount: 0.10, model: 'hive_credential_issue' },
+  '/credential/verify': { amount: 0.01, model: 'hive_credential_verify' },
+  '/credential/scope':  { amount: 0.05, model: 'hive_credential_scope' },
+};
+
+function getHiveCredentialPrice(path) {
+  return HIVE_CREDENTIAL_PRICING[path] || null;
+}
+
 /**
  * Returns the x402 price for /trust/score/:did and /trust/protected/:did.
  * These are the two new monetised trust lookup endpoints.
@@ -362,8 +377,9 @@ export default async function x402Middleware(req, res, next) {
       const liquidationPrice = getLiquidationPrice(req.path);
       const trustLookupPrice = getTrustLookupPrice(req.path);
       const didCredentialPrice = getDidCredentialPrice(req.path, req.method);
+      const hiveCredentialPrice = getHiveCredentialPrice(req.path);
       const auditPrice = getAuditPrice(req.path);
-      const requiredPrice = auditPrice || viewkeyPrice || delegationPrice || oraclePrice || bondPrice || reputationPrice || liquidationPrice || trustLookupPrice || didCredentialPrice || getApiCallPrice();
+      const requiredPrice = auditPrice || viewkeyPrice || delegationPrice || oraclePrice || bondPrice || reputationPrice || liquidationPrice || trustLookupPrice || didCredentialPrice || hiveCredentialPrice || getApiCallPrice();
       if (verification.amount < requiredPrice.amount) {
         return res.status(402).json({
           success: false,
@@ -402,13 +418,14 @@ export default async function x402Middleware(req, res, next) {
   const liquidationFallback = getLiquidationPrice(req.path);
   const trustLookupFallback = getTrustLookupPrice(req.path);
   const didCredentialFallback = getDidCredentialPrice(req.path, req.method);
+  const hiveCredentialFallback = getHiveCredentialPrice(req.path);
   const auditFallback = getAuditPrice(req.path);
   // Free audit reads short-circuit — propagate $0 immediately so the middleware
   // never emits a 402 challenge for promised free surfaces.
   if (auditFallback && auditFallback.amount === 0) {
     return next();
   }
-  const fixedPrice = auditFallback || viewkeyFallback || delegationFallback || oracleFallback || bondFallback || reputationFallback || liquidationFallback || trustLookupFallback || didCredentialFallback;
+  const fixedPrice = auditFallback || viewkeyFallback || delegationFallback || oracleFallback || bondFallback || reputationFallback || liquidationFallback || trustLookupFallback || didCredentialFallback || hiveCredentialFallback;
   const price = fixedPrice
     ? { ...getApiCallPrice(), amount: fixedPrice.amount, model: fixedPrice.model }
     : getApiCallPrice();
@@ -510,6 +527,8 @@ function isFreePath(path) {
   // HiveComply (Day 14): all paths handle pricing inline (Stripe / USDC settlement_tx),
   // not via x402 micropay middleware. Webhook signature verifies authenticity.
   if (path.startsWith('/comply/')) return true;
+  // HiveCredential pubkey — free Ed25519 issuer key for offline verify
+  if (path === '/credential/pubkey') return true;
   // HiveAudit free read projections — belt-and-suspenders alongside getAuditPrice().
   if (path.startsWith('/audit/readiness/') ||
       path.startsWith('/audit/badge/') ||
