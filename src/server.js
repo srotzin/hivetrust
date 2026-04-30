@@ -46,6 +46,7 @@ import aiTrustBriefRouter from './routes/ai-brief.js';
 import cteRouter from './routes/cte.js';
 import spectralRouter from './routes/spectral.js';
 import passportRouter from './routes/passport.js';
+import credentialRouter from './routes/credential.js';
 
 // ─── App Setup ────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ app.get('/openapi.json', (req, res) => {
       rails: ['x402', 'mpp'],
       categories: ['identity', 'trust'],
       integration: 'first-party',
-      tags: ['did', 'trust-score', 'identity-passport', 'verifiable-credentials', 'spectral-receipts', 'kya', 'agent-kyc'],
+      tags: ['did', 'trust-score', 'identity-passport', 'verifiable-credentials', 'spectral-receipts', 'kya', 'agent-kyc', 'hive-credential', 'scope-enforcement', 'authenticatable'],
       treasury: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e',
     },
     paths: {
@@ -157,6 +158,30 @@ app.get('/openapi.json', (req, res) => {
           description: 'Signed reputation proof. $0.10 USDC.',
           'x-mpp-charge': { amount: '100000', intent: 'charge' },
           responses: { '200': { description: 'Reputation proof' }, '402': { description: 'Payment required' } },
+        },
+      },
+      '/v1/credential/issue': {
+        post: {
+          summary: 'HiveCredential — issue scoped credential',
+          description: 'Issue an institutional-scale agent credential with cryptographic scope (purpose, data_classes, regions, counterparties, max_spend_usd, expires_at). Ed25519-signed envelope. $0.10 USDC.',
+          'x-mpp-charge': { amount: '100000', intent: 'charge' },
+          responses: { '200': { description: 'Credential issued' }, '402': { description: 'Payment required — x402 or MPP' } },
+        },
+      },
+      '/v1/credential/verify': {
+        post: {
+          summary: 'HiveCredential — verify credential and scope',
+          description: 'Verify credential validity (revocation, expiry, freeze) and check required_scope satisfaction. $0.01 USDC.',
+          'x-mpp-charge': { amount: '10000', intent: 'charge' },
+          responses: { '200': { description: 'Verification result' }, '402': { description: 'Payment required — x402 or MPP' } },
+        },
+      },
+      '/v1/credential/scope': {
+        post: {
+          summary: 'HiveCredential — mutate scope (narrow/freeze/unfreeze/revoke)',
+          description: 'Append a scope mutation to the credential. Audit-logged, Ed25519-signed. $0.05 USDC.',
+          'x-mpp-charge': { amount: '50000', intent: 'charge' },
+          responses: { '200': { description: 'Scope mutated' }, '402': { description: 'Payment required — x402 or MPP' } },
         },
       },
     },
@@ -1142,6 +1167,14 @@ app.use('/v1/trust/spectral', spectralRouter);
 // (BOGO first-call-free, x402 $0.25/read, enterprise unlimited)
 
 app.use('/v1/identity', passportRouter);
+
+// ─── HiveCredential (AUTHENTICATABLE pillar) ─────────────────
+// POST /v1/credential/issue   $0.10 USDC — issue scoped credential
+// POST /v1/credential/verify  $0.01 USDC — verify cred + active scope
+// POST /v1/credential/scope   $0.05 USDC — narrow / freeze / unfreeze / revoke
+// GET  /v1/credential/pubkey  FREE       — Ed25519 issuer pubkey for offline verify
+// Both x402 and MPP rails are inherited from the /v1 middleware mount above.
+app.use('/v1/credential', credentialRouter);
 
 // HiveAudit — Day 8 transactional substrate.
 // /v1/audit/log    POST  $0.001  ingress
