@@ -175,6 +175,41 @@ const LIQUIDATION_PRICING = {
   '/liquidation/buy':  0.50,
 };
 
+// HiveAudit product pricing (Days 8/12/14).
+// /v1/audit/log     $0.001  substrate ingress (high-volume)
+// /v1/audit/verify  $0.01   third-party badge verification
+// /v1/audit/list, /receipt, /badge, /readiness  FREE  read-only projections
+// /v1/audit/subscribe  tier-based, handled inline by the route
+// /v1/comply/start     $5,000+ engagement, handled inline by the route
+const AUDIT_PRICING = {
+  '/audit/log':    0.001,
+  '/audit/verify': 0.01,
+};
+
+const AUDIT_FREE_PATHS = new Set([
+  '/audit/list',
+  '/audit/readiness',
+  '/audit/pubkey',
+  '/audit/well-known',
+]);
+
+function getAuditPrice(path) {
+  if (AUDIT_PRICING[path] !== undefined) {
+    return { amount: AUDIT_PRICING[path], model: 'audit_fixed' };
+  }
+  if (AUDIT_FREE_PATHS.has(path)) {
+    return { amount: 0, model: 'audit_free' };
+  }
+  // Free read-only projections by prefix.
+  if (path.startsWith('/audit/receipt/') ||
+      path.startsWith('/audit/badge/') ||
+      path.startsWith('/audit/verify-badge/') ||
+      path.startsWith('/audit/report/')) {
+    return { amount: 0, model: 'audit_free' };
+  }
+  return null;
+}
+
 function getLiquidationPrice(path) {
   if (LIQUIDATION_PRICING[path] !== undefined) {
     return { amount: LIQUIDATION_PRICING[path], model: 'liquidation_fixed' };
@@ -326,7 +361,8 @@ export default async function x402Middleware(req, res, next) {
       const liquidationPrice = getLiquidationPrice(req.path);
       const trustLookupPrice = getTrustLookupPrice(req.path);
       const didCredentialPrice = getDidCredentialPrice(req.path, req.method);
-      const requiredPrice = viewkeyPrice || delegationPrice || oraclePrice || bondPrice || reputationPrice || liquidationPrice || trustLookupPrice || didCredentialPrice || getApiCallPrice();
+      const auditPrice = getAuditPrice(req.path);
+      const requiredPrice = auditPrice || viewkeyPrice || delegationPrice || oraclePrice || bondPrice || reputationPrice || liquidationPrice || trustLookupPrice || didCredentialPrice || getApiCallPrice();
       if (verification.amount < requiredPrice.amount) {
         return res.status(402).json({
           success: false,
@@ -365,7 +401,13 @@ export default async function x402Middleware(req, res, next) {
   const liquidationFallback = getLiquidationPrice(req.path);
   const trustLookupFallback = getTrustLookupPrice(req.path);
   const didCredentialFallback = getDidCredentialPrice(req.path, req.method);
-  const fixedPrice = viewkeyFallback || delegationFallback || oracleFallback || bondFallback || reputationFallback || liquidationFallback || trustLookupFallback || didCredentialFallback;
+  const auditFallback = getAuditPrice(req.path);
+  // Free audit reads short-circuit — propagate $0 immediately so the middleware
+  // never emits a 402 challenge for promised free surfaces.
+  if (auditFallback && auditFallback.amount === 0) {
+    return next();
+  }
+  const fixedPrice = auditFallback || viewkeyFallback || delegationFallback || oracleFallback || bondFallback || reputationFallback || liquidationFallback || trustLookupFallback || didCredentialFallback;
   const price = fixedPrice
     ? { ...getApiCallPrice(), amount: fixedPrice.amount, model: fixedPrice.model }
     : getApiCallPrice();
