@@ -34,6 +34,7 @@ import bondRouter from './routes/bond.js';
 import reputationRouter from './routes/reputation.js';
 import liquidationRouter from './routes/liquidation.js';
 import auditRouter from './routes/audit.js';
+import auditDay12Router from './routes/audit-day12.js';
 import { handleMcpRequest } from './mcp-server.js';
 import { getEngineStatus } from './services/pricing-engine.js';
 import { sendAlert } from './services/alerts.js';
@@ -1146,6 +1147,14 @@ app.use('/v1/identity', passportRouter);
 // /v1/audit/list   GET   FREE
 // /v1/audit/receipt/:id  GET FREE
 app.use('/v1/audit', auditRouter);
+
+// HiveAudit — Day 12 read projections (pillar: DEFENSIBLE).
+// /v1/audit/readiness/:did   GET   FREE
+// /v1/audit/badge/:did       GET   FREE   (SVG default, ?Accept: application/json)
+// /v1/audit/verify-badge/:did GET  FREE
+// /v1/audit/verify           POST  $0.01
+// /v1/audit/pubkey           GET   FREE
+app.use('/v1/audit', auditDay12Router);
 
 // ─── REST API Routes ──────────────────────────────────────────
 
