@@ -130,7 +130,13 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
   return res.json({
     service: 'hivetrust',
     version: '1.0.0',
-    description: 'KYA (Know Your Agent) Identity Verification, Trust Scoring & Insurance for AI Agents',
+    tagline: 'Hive Civilization is the cryptographic backbone of autonomous agent commerce — the layer that makes every agent transaction provable, every payment settable, and every decision defensible.',
+    description: 'KYA (Know Your Agent) Identity Verification, Trust Scoring, ZK-attested Audit Receipts & Insurance for AI Agents',
+    pillars: {
+      provable: ['SpectralZK', 'HAHS', 'ViewKey', 'HiveAudit', 'HiveSHOD'],
+      settable: ['x402', 'USDC on Base', 'EIP-3009', 'AP2', 'HiveCompute'],
+      defensible: ['HiveComply', 'HiveAudit subscriptions', 'HiveCertified', 'HiveBench', 'HiveVerify'],
+    },
     host,
     endpoints: {
       api: `${host}/v1`,
@@ -529,7 +535,12 @@ function agentCardHandler(req, res) {
     protocolVersion: '0.3.0',
     name: 'HiveTrust',
     description:
-      'KYA (Know Your Agent) identity verification, behavioral trust scoring, performance bonds, delegation trees, and insurance for autonomous AI agents. The identity backbone of the Hive Civilization.',
+      'Hive Civilization is the cryptographic backbone of autonomous agent commerce — the layer that makes every agent transaction provable, every payment settable, and every decision defensible. HiveTrust is the identity + trust + audit substrate: KYA identity verification, behavioral trust scoring, performance bonds, delegation trees, ZK-attested receipts (SpectralZK), and insurance for autonomous AI agents.',
+    pillars: {
+      provable: 'SpectralZK + HAHS receipts. Canonical-JSON Ed25519 signatures. Byte-match against AgentGraph CTEF v0.3.1.',
+      settable: 'x402 + USDC on Base. EIP-3009 gasless. Real rails only — never mock, never simulated.',
+      defensible: 'EU AI Act Article 12 (logging) + Article 13 (transparency) ready. ZK-attested audit trail enforceable August 2026.',
+    },
     url: 'https://hivetrust.hiveagentiq.com',
     version: '1.0.0',
     provider: {
