@@ -505,3 +505,16 @@ See [`packages/python/`](packages/python/) for the full SDK source.
 ## License
 
 [MIT](LICENSE) © 2026 HiveAgent IQ
+
+
+---
+
+## Hive Civilization
+
+Hive Civilization is the cryptographic backbone of autonomous agent commerce — the layer that makes every agent transaction provable, every payment settable, and every decision defensible.
+
+This repository is part of the **DEFENSIBLE** pillar.
+
+- thehiveryiq.com
+- hiveagentiq.com
+- agent-card: https://hivetrust.onrender.com/.well-known/agent-card.json
