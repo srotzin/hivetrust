@@ -91,6 +91,13 @@ const PUBLIC_PREFIXES = [
   '/trust/schema',
   '/v1/trust/vc/supermodel',   // supermodel credential issuance — free, no API key
   '/trust/vc/supermodel',
+  '/v1/audit/',          // HiveAudit — handles its own payment gating (free reads, $0.001 log, $0.01 verify via x402)
+  '/audit/',
+  '/v1/comply/',         // HiveComply — Stripe webhook handles its own HMAC signature verify; quote/start/settle public discovery
+  '/comply/',
+  '/.well-known/schemas/', // public schema documents (HAHS v1 etc.)
+  '/.well-known/agent-card.json',
+  '/.well-known/x402',
 ];
 
 function hashKey(rawKey) {
