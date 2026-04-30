@@ -602,6 +602,74 @@ const SCHEMA_SQL = `
     assets_transferred TEXT,
     completed_at TEXT
   );
+
+  -- ─── HiveAudit product surface (Day 8 substrate) ───────────────
+  -- Append-only ZK-attested receipt store. Every settled call produces one row.
+  -- Powers HiveAudit subscriptions, HiveComply filings, HiveVerify lookups, badges, and readiness scoring.
+  CREATE TABLE IF NOT EXISTS audit_receipts (
+    receipt_id TEXT PRIMARY KEY,
+    did TEXT NOT NULL,
+    actor_id TEXT,
+    upstream TEXT,
+    model TEXT,
+    request_hash TEXT NOT NULL,
+    response_hash TEXT NOT NULL,
+    canonical_hash TEXT NOT NULL,
+    signature TEXT,
+    pubkey TEXT,
+    epoch_id TEXT,
+    sector TEXT,
+    revenue_usdc DOUBLE PRECISION DEFAULT 0,
+    settlement_tx TEXT,
+    payload TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT DEFAULT (NOW()::TEXT)
+  );
+
+  -- HiveAudit subscription tier per DID (Starter/Professional/Enterprise/Federal)
+  -- Day 14 HiveComply filings auto-bundle a 30-day Pro trial via this table.
+  CREATE TABLE IF NOT EXISTS audit_subscriptions (
+    subscription_id TEXT PRIMARY KEY,
+    did TEXT NOT NULL,
+    tier TEXT NOT NULL,
+    sector TEXT,
+    retention_days INTEGER NOT NULL,
+    starts_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    auto_renew BOOLEAN DEFAULT FALSE,
+    source TEXT DEFAULT 'direct',
+    settlement_tx TEXT,
+    revenue_usdc DOUBLE PRECISION DEFAULT 0,
+    status TEXT DEFAULT 'active',
+    created_at TEXT DEFAULT (NOW()::TEXT)
+  );
+
+  -- HiveComply engagement (Day 14): $5K filing + optional $2.5K rush + $2.5K delta
+  CREATE TABLE IF NOT EXISTS comply_engagements (
+    engagement_id TEXT PRIMARY KEY,
+    did TEXT NOT NULL,
+    sector TEXT NOT NULL,
+    article TEXT NOT NULL DEFAULT 'EU-AI-Act-12-13',
+    rush BOOLEAN DEFAULT FALSE,
+    delta BOOLEAN DEFAULT FALSE,
+    total_usdc DOUBLE PRECISION NOT NULL,
+    settlement_tx TEXT,
+    bundled_subscription_id TEXT,
+    status TEXT DEFAULT 'pending',
+    delivered_at TEXT,
+    created_at TEXT DEFAULT (NOW()::TEXT)
+  );
+
+  -- Cached badge SVG payloads (Day 12). Regenerated when readiness score changes.
+  CREATE TABLE IF NOT EXISTS audit_badges (
+    did TEXT PRIMARY KEY,
+    score INTEGER NOT NULL,
+    grade TEXT NOT NULL,
+    receipts_count INTEGER NOT NULL DEFAULT 0,
+    badge_svg TEXT NOT NULL,
+    badge_signature TEXT,
+    issued_at TEXT DEFAULT (NOW()::TEXT),
+    expires_at TEXT
+  );
 `;
 
 const INDEXES_SQL = `
@@ -638,6 +706,16 @@ const INDEXES_SQL = `
   CREATE INDEX IF NOT EXISTS idx_liquidation_listings_status ON liquidation_listings(status);
   CREATE INDEX IF NOT EXISTS idx_liquidation_transactions_seller ON liquidation_transactions(seller_did);
   CREATE INDEX IF NOT EXISTS idx_liquidation_transactions_buyer ON liquidation_transactions(buyer_did);
+  CREATE INDEX IF NOT EXISTS idx_audit_receipts_did ON audit_receipts(did);
+  CREATE INDEX IF NOT EXISTS idx_audit_receipts_created ON audit_receipts(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_audit_receipts_canonical ON audit_receipts(canonical_hash);
+  CREATE INDEX IF NOT EXISTS idx_audit_receipts_settlement ON audit_receipts(settlement_tx);
+  CREATE INDEX IF NOT EXISTS idx_audit_subs_did ON audit_subscriptions(did);
+  CREATE INDEX IF NOT EXISTS idx_audit_subs_status ON audit_subscriptions(status);
+  CREATE INDEX IF NOT EXISTS idx_audit_subs_expires ON audit_subscriptions(expires_at);
+  CREATE INDEX IF NOT EXISTS idx_comply_eng_did ON comply_engagements(did);
+  CREATE INDEX IF NOT EXISTS idx_comply_eng_status ON comply_engagements(status);
+  CREATE INDEX IF NOT EXISTS idx_audit_badges_grade ON audit_badges(grade);
 `;
 
 /**

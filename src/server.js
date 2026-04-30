@@ -33,6 +33,7 @@ import oracleRouter from './routes/oracle.js';
 import bondRouter from './routes/bond.js';
 import reputationRouter from './routes/reputation.js';
 import liquidationRouter from './routes/liquidation.js';
+import auditRouter from './routes/audit.js';
 import { handleMcpRequest } from './mcp-server.js';
 import { getEngineStatus } from './services/pricing-engine.js';
 import { sendAlert } from './services/alerts.js';
@@ -1062,6 +1063,12 @@ app.use('/v1/trust/spectral', spectralRouter);
 // (BOGO first-call-free, x402 $0.25/read, enterprise unlimited)
 
 app.use('/v1/identity', passportRouter);
+
+// HiveAudit — Day 8 transactional substrate.
+// /v1/audit/log    POST  $0.001  ingress
+// /v1/audit/list   GET   FREE
+// /v1/audit/receipt/:id  GET FREE
+app.use('/v1/audit', auditRouter);
 
 // ─── REST API Routes ──────────────────────────────────────────
 
