@@ -204,6 +204,7 @@ function getAuditPrice(path) {
   if (path.startsWith('/audit/receipt/') ||
       path.startsWith('/audit/badge/') ||
       path.startsWith('/audit/verify-badge/') ||
+      path.startsWith('/audit/readiness/') ||
       path.startsWith('/audit/report/')) {
     return { amount: 0, model: 'audit_free' };
   }
