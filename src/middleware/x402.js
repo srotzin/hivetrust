@@ -507,6 +507,16 @@ function isFreePath(path) {
   if (path.startsWith('/reputation/status/') || path.startsWith('/reputation/departure-cost/')) return true;
   if (path === '/liquidation/listings' || path.startsWith('/liquidation/listing/') ||
       path === '/liquidation/history' || path === '/liquidation/stats') return true;
+  // HiveComply (Day 14): all paths handle pricing inline (Stripe / USDC settlement_tx),
+  // not via x402 micropay middleware. Webhook signature verifies authenticity.
+  if (path.startsWith('/comply/')) return true;
+  // HiveAudit free read projections — belt-and-suspenders alongside getAuditPrice().
+  if (path.startsWith('/audit/readiness/') ||
+      path.startsWith('/audit/badge/') ||
+      path.startsWith('/audit/verify-badge/') ||
+      path.startsWith('/audit/receipt/') ||
+      path === '/audit/list' ||
+      path === '/audit/pubkey') return true;
   return false;
 }
 
