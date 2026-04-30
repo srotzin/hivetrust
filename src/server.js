@@ -124,6 +124,72 @@ app.get('/health', async (req, res) => {
 
 // ─── Discovery Document (public) ─────────────────────────────
 
+// Statesmanship endpoint — HAHS v1 JSON Schema.
+// Promised to aeoess/agent-governance-vocabulary#58 thread for ERC-8004 reuse.
+// Permanent maintenance commitment per STATESMANSHIP_ENDPOINTS.md.
+// Read-only, no auth, never monetized.
+app.get('/.well-known/schemas/hahs-v1.json', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=86400');
+  return res.json({
+    '$schema': 'https://json-schema.org/draft/2020-12/schema',
+    '$id': 'https://hivetrust.onrender.com/.well-known/schemas/hahs-v1.json',
+    title: 'HAHS — Hashes-as-Histories v1',
+    description: 'HiveTrust canonical schema for hire-time scope ceiling and composed-scope (HAHS ∩ chain) audit receipts. RFC 8785 JCS canonicalized, Ed25519 signed.',
+    type: 'object',
+    required: ['policy_id', 'policy_version', 'scope', 'composed_scope', 'receipt_hash', 'signature'],
+    properties: {
+      policy_id: { type: 'string', description: 'Stable identifier for the hire-time policy' },
+      policy_version: { type: 'string', description: 'Semver of the policy at hire time' },
+      scope: {
+        type: 'object',
+        description: 'Hire-time scope ceiling — the maximum permissions granted at delegation',
+        required: ['actions', 'resources'],
+        properties: {
+          actions: { type: 'array', items: { type: 'string' } },
+          resources: { type: 'array', items: { type: 'string' } },
+          spend_cap_usdc: { type: 'number', minimum: 0 },
+          ttl_seconds: { type: 'integer', minimum: 0 },
+        },
+      },
+      composed_scope: {
+        type: 'object',
+        description: 'HAHS ∩ chain — the intersection of the hire-time ceiling with chain-time policy',
+        required: ['actions', 'resources'],
+        properties: {
+          actions: { type: 'array', items: { type: 'string' } },
+          resources: { type: 'array', items: { type: 'string' } },
+          spend_remaining_usdc: { type: 'number', minimum: 0 },
+        },
+      },
+      receipt_hash: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'SHA-256 hex of canonicalized receipt body' },
+      signature: { type: 'string', description: 'Ed25519 signature (hex or base64)' },
+      issuer_pubkey: { type: 'string', description: 'Ed25519 issuer pubkey, hex' },
+      revocation_witness: { type: 'string', format: 'uri', description: 'URL to verify revocation status' },
+      epoch_id: { type: 'string', description: 'Continuity-layer epoch at receipt creation' },
+      created_at: { type: 'string', format: 'date-time' },
+    },
+    examples: [{
+      policy_id: 'pol_audit_pro_v1',
+      policy_version: '1.0.0',
+      scope: { actions: ['audit.log', 'audit.read'], resources: ['did:hive:*'], spend_cap_usdc: 500, ttl_seconds: 2592000 },
+      composed_scope: { actions: ['audit.log'], resources: ['did:hive:agent_42'], spend_remaining_usdc: 412.50 },
+      receipt_hash: '0'.repeat(64),
+      signature: 'e30=',
+      issuer_pubkey: '12de746d51fca019c5c64685f2688a0e4a57ab532f6f6c67d44494de43f4c408',
+      revocation_witness: 'https://hive-gamification.onrender.com/v1/compliance/verify/{attestation_id}',
+      epoch_id: 'epoch_2026_04_30_T_1200',
+      created_at: '2026-04-30T12:00:00Z',
+    }],
+    canonicalization: 'RFC 8785 JCS — byte-identical to AgentGraph CTEF v0.3.1 (4/4 byte-match)',
+    pubkey_advertisement: 'https://hivetrust.onrender.com/v1/audit/pubkey',
+    cross_references: {
+      thread: 'https://github.com/aeoess/agent-governance-vocabulary/issues/58',
+      a2a_thread: 'https://github.com/a2aproject/A2A/issues/1786',
+      strategic_north_star: 'https://hivetrust.onrender.com/.well-known/hivetrust.json',
+    },
+  });
+});
+
 app.get('/.well-known/hivetrust.json', (req, res) => {
   const host = process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com';
 
