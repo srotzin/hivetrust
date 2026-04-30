@@ -95,6 +95,8 @@ const PUBLIC_PREFIXES = [
   '/audit/',
   '/v1/comply/',         // HiveComply — Stripe webhook handles its own HMAC signature verify; quote/start/settle public discovery
   '/comply/',
+  '/v1/credential/pubkey',  // HiveCredential — free Ed25519 issuer pubkey for offline verify
+  '/credential/pubkey',     // when mounted at /v1, req.path is /credential/pubkey
   '/.well-known/schemas/', // public schema documents (HAHS v1 etc.)
   '/.well-known/agent-card.json',
   '/.well-known/x402',
