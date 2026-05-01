@@ -48,6 +48,15 @@ import spectralRouter from './routes/spectral.js';
 import passportRouter from './routes/passport.js';
 import credentialRouter from './routes/credential.js';
 
+// ─── Recruitment envelope ─────────────────────────────────────
+import {
+  recruitmentEnvelope,
+  recruitmentResponseWrapper,
+  recruitmentErrorHandler,
+  assertEnvelopeIntegrity,
+} from './middleware/recruitment.js';
+assertEnvelopeIntegrity();
+
 // ─── App Setup ────────────────────────────────────────────────
 
 const app = express();
@@ -88,6 +97,9 @@ app.use(
 // 50mb limit for bulk telemetry ingestion
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Wrap any res.status(N>=400).json() with the recruitment envelope.
+app.use(recruitmentResponseWrapper);
 
 // ─── Rate Limiting ────────────────────────────────────────────
 
@@ -1305,5 +1317,8 @@ setTimeout(() => {
 setTimeout(() => {
   warmTrustRegistry();
 }, 3000);
+
+// ─── Recruitment envelope — trailing error handler ───────────────────────
+app.use(recruitmentErrorHandler);
 
 export default app;
