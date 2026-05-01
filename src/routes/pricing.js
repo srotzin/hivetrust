@@ -22,7 +22,7 @@ import ipAllowlist from '../middleware/ip-allowlist.js';
 
 const HIVE_PAYMENT_ADDRESS = (process.env.HIVE_PAYMENT_ADDRESS || process.env.HIVETRUST_PAYMENT_ADDRESS || '').toLowerCase();
 const BASE_CHAIN_ID = 8453;
-const USDC_CONTRACT = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
+const USDC_CONTRACT = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 
 // USDC subscription tiers
 const PLAN_TIERS = {

@@ -631,7 +631,7 @@ router.post('/verify', async (req, res) => {
   if (!free && !req.paymentVerified) {
     // Return 402 with x402 payment challenge
     const PAYMENT_ADDRESS = (process.env.HIVE_PAYMENT_ADDRESS || process.env.HIVETRUST_PAYMENT_ADDRESS || '0x0000000000000000000000000000000000000000').toLowerCase();
-    const USDC_CONTRACT = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
+    const USDC_CONTRACT = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
     const PRICE_USDC = 0.01;
 
     res.set({

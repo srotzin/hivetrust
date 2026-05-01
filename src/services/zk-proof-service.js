@@ -173,12 +173,12 @@ function generateFallbackResponse({ minTxCount, minVolumeCents }, errorDetail) {
     phase: 1,
     note: 'ZK proof generation unavailable in this environment. The Provable SDK WASM runtime requires Node 22+. Full Aleo mainnet deployment: Q2 2026.',
     attestation: {
-      wallet: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e',
+      wallet: '0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E',
       network: 'base',
       schema: 'EIP-712',
       claim: 'This wallet is the verified settlement address for Hive Civilization. Wallet reputation is proven via zero-knowledge proofs on Aleo — balance is private by design.',
       verify_instructions: 'Request a signed EIP-712 attestation from the Hive Civilization team, or wait for Aleo mainnet deployment (Q2 2026).',
-      explorer: 'https://basescan.org/address/0x15184bf50b3d3f52b60434f8942b7d52f2eb436e',
+      explorer: 'https://basescan.org/address/0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E',
     },
     ...(errorDetail ? { error_detail: errorDetail } : {}),
   };

@@ -110,12 +110,12 @@ app.get('/openapi.json', (req, res) => {
     servers: [{ url: 'https://hivetrust.onrender.com' }],
     'x-mpp': {
       realm: 'hivetrust.onrender.com',
-      payment: { method: 'tempo', currency: '0x20c000000000000000000000b9537d11c60e8b50', decimals: 6, recipient: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e' },
+      payment: { method: 'tempo', currency: '0x20c000000000000000000000b9537d11c60e8b50', decimals: 6, recipient: '0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E' },
       rails: ['x402', 'mpp'],
       categories: ['identity', 'trust'],
       integration: 'first-party',
       tags: ['did', 'trust-score', 'identity-passport', 'verifiable-credentials', 'spectral-receipts', 'kya', 'agent-kyc', 'hive-credential', 'scope-enforcement', 'authenticatable'],
-      treasury: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e',
+      treasury: '0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E',
     },
     paths: {
       '/v1/trust/score/{did}': {
@@ -641,7 +641,7 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
       protocol: 'x402',
       currency: 'USDC',
       network: 'base',
-      address: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e',
+      address: '0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E',
     },
     extensions: {
       hive_pricing: {
@@ -802,9 +802,9 @@ function agentCardHandler(req, res) {
       protocol: 'x402',
       currency: 'USDC',
       network: 'base',
-      address: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e',
+      address: '0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E',
       secondary_rails: [
-        { currency: 'USDT', network: 'base',    address: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e' },
+        { currency: 'USDT', network: 'base',    address: '0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E' },
         { currency: 'USDC', network: 'solana',  address: 'B1N61cuL35fhskWz5dw8XqDyP6LWi3ZWmq8CNA9L3FVn' },
       ],
       fee_schedule: {
@@ -1007,7 +1007,7 @@ app.get('/.well-known/did.json', async (req, res) => {
     const ed = await import('@noble/ed25519');
     const { createHash } = await import('crypto');
     const host = process.env.HIVETRUST_HOST || 'https://hivetrust.onrender.com';
-    const USDC_CONTRACT_DID = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
+    const USDC_CONTRACT_DID = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
     const seedHex = process.env.SERVER_DID_SEED || process.env.PASSPORT_SIGNING_SEED;
     const anchor = process.env.HIVE_INTERNAL_KEY || 'hive-passport-issuer-2026';
     const privKey = seedHex && seedHex.length >= 64
@@ -1038,7 +1038,7 @@ app.get('/.well-known/did.json', async (req, res) => {
       }],
       _hive: {
         brand: '#C08D23',
-        treasury: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e',
+        treasury: '0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E',
         usdc_contract: USDC_CONTRACT_DID,
         network: 'base',
         spec: 'hive-passport-v1',

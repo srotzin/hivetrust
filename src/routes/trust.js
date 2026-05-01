@@ -627,7 +627,7 @@ router.post('/reputation/proof', async (req, res) => {
 
 router.get('/wallet-attestation', (req, res) => {
   return ok(res, SERVICE, {
-    wallet: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e',
+    wallet: '0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E',
     network: 'base',
     entity: 'Hive Civilization',
     attestation_schema: 'EIP-712',
@@ -636,7 +636,7 @@ router.get('/wallet-attestation', (req, res) => {
     aleo_program: 'hive_trust.aleo',
     proof_generator: 'Nordic Mine — 115 Aleo PoSW miners',
     verify_instructions: 'To verify wallet control, request a signed EIP-712 attestation from the Hive Civilization team. Full ZK verification will be available on Aleo mainnet by Q2 2026.',
-    explorer: 'https://basescan.org/address/0x15184bf50b3d3f52b60434f8942b7d52f2eb436e',
+    explorer: 'https://basescan.org/address/0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E',
     sovrin_note: 'The Sovrin Foundation, the only prior HAGF publisher, was dissolved by the State of Utah on May 21, 2025. Source: https://sovrin.org/the-sovrin-foundation-has-been-dissolved-but-sovrin-mainnet-remains/',
   });
 });

@@ -24,8 +24,8 @@ const SERVICE = 'hivetrust';
 
 const PASSPORT_PRICE_USDC = 0.25;
 const ENTERPRISE_MONTHLY_USDC = 2000;
-const PAYMENT_ADDRESS = (process.env.HIVE_PAYMENT_ADDRESS || process.env.HIVETRUST_PAYMENT_ADDRESS || '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e').toLowerCase();
-const USDC_CONTRACT = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
+const PAYMENT_ADDRESS = (process.env.HIVE_PAYMENT_ADDRESS || process.env.HIVETRUST_PAYMENT_ADDRESS || '0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E').toLowerCase();
+const USDC_CONTRACT = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const BASE_RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const SPECTRAL_RECEIPT_URL = 'https://hive-receipt.onrender.com/v1/receipt/sign';
@@ -414,7 +414,7 @@ router.get('/.well-known/did.json', async (req, res) => {
     ],
     _hive: {
       brand: '#C08D23',
-      treasury: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e',
+      treasury: '0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E',
       usdc_contract: USDC_CONTRACT,
       network: 'base',
       spec: 'hive-passport-v1',

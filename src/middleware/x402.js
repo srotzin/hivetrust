@@ -18,7 +18,7 @@ import { query } from '../db.js';
 const PAYMENT_ADDRESS = (process.env.HIVE_PAYMENT_ADDRESS || process.env.HIVETRUST_PAYMENT_ADDRESS || '').toLowerCase();
 const HIVE_INTERNAL_KEY = process.env.HIVETRUST_SERVICE_KEY || process.env.HIVE_INTERNAL_KEY || '';
 const BASE_RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
-const USDC_CONTRACT = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
+const USDC_CONTRACT = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 
 const FREE_ENDPOINTS = new Set([
   '/health',
