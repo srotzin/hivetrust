@@ -27,7 +27,6 @@ import mppMiddleware from './middleware/mpp.js';
 import auditLogger from './middleware/audit-logger.js';
 import apiRouter from './routes/api.js';
 import pricingRouter from './routes/pricing.js';
-import viewkeyRouter from './routes/viewkey.js';
 import delegationRouter from './routes/delegation.js';
 import oracleRouter from './routes/oracle.js';
 import bondRouter from './routes/bond.js';
@@ -287,22 +286,6 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       mcp: `${host}/mcp`,
       health: `${host}/health`,
       discovery: `${host}/.well-known/hivetrust.json`,
-      viewkey: `${host}/v1/viewkey`,
-    },
-    viewkey: {
-      description: 'ViewKey Audit Rail — Zero-Knowledge proof verification for structural code compliance',
-      endpoints: {
-        verify_compliance: `${host}/v1/viewkey/verify-compliance`,
-        verify_bom: `${host}/v1/viewkey/verify-bom`,
-        audit_trail: `${host}/v1/viewkey/audit-trail/:project_id`,
-        issue_certificate: `${host}/v1/viewkey/issue-certificate`,
-      },
-      pricing: {
-        verify_compliance: '$0.05 USDC',
-        verify_bom: '$0.10 + $0.02/item USDC',
-        audit_trail: '$0.03 USDC',
-        issue_certificate: '$0.25 USDC',
-      },
     },
     oracle: {
       description: 'Data Oracle — "Sign Once, Settle Many" cryptographic Context Leases',
@@ -317,7 +300,6 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       },
       pricing: {
         construction_pricing: '$0.50/24h, $1.20/72h, $2.00/168h',
-        simpson_catalog: '$0.30/24h, $0.75/72h, $1.25/168h',
         compliance_feeds: '$0.40/24h, $1.00/72h, $1.75/168h',
         market_data: '$0.60/24h, $1.50/72h, $2.50/168h',
         pheromone_signals: '$0.25/24h, $0.60/72h, $1.00/168h',
@@ -412,7 +394,6 @@ app.get('/.well-known/hivetrust.json', (req, res) => {
       'federation',
       'x402-payments',
       'autonomous-pricing',
-      'viewkey-compliance-verification',
       'spend-delegation',
       'data-oracle-context-leases',
       'trust-staking-bonds',
@@ -516,7 +497,6 @@ app.get('/', (req, res) => {
       bond: `${host}/v1/bond`,
       reputation: `${host}/v1/reputation`,
       liquidation: `${host}/v1/liquidation`,
-      viewkey: `${host}/v1/viewkey`,
       mcp: `${host}/mcp`,
       health: `${host}/health`,
       discovery: `${host}/.well-known/hivetrust.json`,
@@ -1126,8 +1106,6 @@ app.use('/v1/liquidation', liquidationRouter);
 app.post('/mcp', handleMcpRequest);
 
 // ─── ViewKey Audit Rail Routes ────────────────────────────────
-
-app.use('/v1/viewkey', viewkeyRouter);
 
 // ─── Trust Routes (W3C DID Core + VCDM 2.0 + Cheqd) ─────────
 
