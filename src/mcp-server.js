@@ -510,7 +510,7 @@ const TOOLS = [
       'Create a Data Oracle Context Lease — "Sign Once, Settle Many". ' +
       'Grants unlimited access to a data stream for a fixed period (24h/72h/168h). ' +
       'Returns a cryptographic lease token (SHA-256) for zero-friction verification. ' +
-      'Available streams: construction_pricing, simpson_catalog, compliance_feeds, market_data, pheromone_signals.',
+      'Available streams: construction_pricing, compliance_feeds, market_data, pheromone_signals.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -520,7 +520,7 @@ const TOOLS = [
         },
         data_stream: {
           type: 'string',
-          enum: ['construction_pricing', 'simpson_catalog', 'compliance_feeds', 'market_data', 'pheromone_signals'],
+          enum: ['construction_pricing', 'compliance_feeds', 'market_data', 'pheromone_signals'],
           description: 'The data stream to lease access to',
         },
         duration_hours: {
