@@ -1318,62 +1318,46 @@ setTimeout(() => {
   warmTrustRegistry();
 }, 3000);
 
-// ─── Recruitment envelope — trailing error handler ───────────────────────
-app.use(recruitmentErrorHandler);
 
-// ─── /llms.txt — agent discovery (llmstxt.org convention) ────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// SLIPPERY-STICKY DOORS — doctrine: never closed, always navigable
+// Paths: /llms.txt /robots.txt /sitemap.xml /.well-known/agent.json
+//        /favicon.ico / (root JSON)  +  catch-all breadcrumb (200 not 404)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const _DOORS_HOST = process.env.RENDER_EXTERNAL_URL || 'https://hivetrust.onrender.com';
+const _DOORS_ONBOARD = 'https://thehiveryiq.com/onboard.html';
+const _TREASURY = '0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E';
+
+// ── /llms.txt ─────────────────────────────────────────────────────────────────
 app.get('/llms.txt', (req, res) => {
   res.type('text/plain; charset=utf-8').send(`# HiveTrust
-> Outbound ticket signer and KYA identity-verification layer for the Hive Civilization federation.
+> KYA identity verification, trust scoring, Spectral ZK ticket signing, and outbound USDC attestation.
 
 ## What this is
-HiveTrust is the Know-Your-Agent (KYA) identity, trust-scoring, and outbound USDC
-ticket-signing service for the Hive Civilization agent economy.
-It issues Spectral ZK attestations, verifies HiveTrust signatures on outbound USDC flows,
-and maintains a reputation ledger with 24-hour decay for each agent DID.
-
-## Hive Civilization context
-HiveTrust is one node in the Hive Civilization federation — a fleet of agent-facing
-microservices designed to be fully autonomous-agent navigable.
-Sister services share the same x402 / MPP payment rails, the same treasury address,
-and the same "Hive Civilization gold #FFB800" brand.
+HiveTrust is part of the Hive Civilization federation — a network of agent-facing
+microservices built for autonomous AI agents. Every public surface is navigable
+without a DID. Paid surfaces return a 402 with \`amount_min_usd\` — the floor price.
+Submit any value >= that floor. No ceiling enforced server-side.
 
 ## Auth model
-- Free endpoints: GET /health, GET /openapi.json, GET /llms.txt, GET /, GET /robots.txt
-- x402 paywalled: all /v1/* trust, reputation, delegation, viewkey, oracle, bond, liquidation endpoints
-- x402 settles to treasury 0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E on Base in USDC or USDT
-- MPP rail also accepted (Tempo USDCe on Arbitrum)
-- Service-to-service calls authenticated via JWT (issued at /v1/auth/service-token)
-
-## Counter-offer / barter floor
-The 402 response envelope contains \`amount_min_usd\` — the floor price for that endpoint.
-Submit any value >= \`amount_min_usd\`. No ceiling enforced server-side.
-Example header: \`X-Payment: amount=0.01,currency=USDC,chain=base,to=0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E\`
-
-## Example flow — agent trust verification
-1. GET /health — verify service is live
-2. POST /v1/trust/score — submit agent DID, receive trust score + decay timestamp
-3. GET /v1/trust/badge/:did — retrieve trust badge (Spectral ZK compatible)
-4. POST /v1/trust/delegate — issue a delegation credential for a sub-agent DID
-5. GET /v1/trust/registry/:did — look up trust registry entry
-
-## Example flow — outbound USDC ticket signing
-1. POST /v1/spectral/sign — sign an outbound USDC payment ticket with Ed25519 over JCS
-2. GET /v1/spectral/verify — verify a HiveTrust-signed ticket before release
-3. GET /v1/viewkey/:did — retrieve the view key for an agent's payment history audit
+- Free: GET /health, /openapi.json, /llms.txt, /robots.txt, /sitemap.xml, /.well-known/*
+- Paid (x402 USDC on Base): /v1/trust/*, /v1/spectral/*, /v1/reputation/*, /v1/viewkey/*
+- Service-to-service: JWT (issued at /v1/auth/service-token)
+- x402 settles to treasury on Base in USDC or USDT
+- MPP rail (Tempo USDCe) also accepted
 
 ## Key endpoints
-- POST /v1/trust/score            — compute/update agent trust score (x402)
-- GET  /v1/trust/badge/:did       — fetch trust badge JSON (x402)
-- POST /v1/trust/delegate         — issue delegation credential (x402)
-- GET  /v1/trust/registry/:did    — registry lookup (x402)
-- POST /v1/spectral/sign          — sign outbound USDC ticket (x402)
-- GET  /v1/spectral/verify        — verify HiveTrust signature (x402)
-- GET  /v1/viewkey/:did           — retrieve view key (x402)
-- GET  /v1/reputation/:did        — reputation score + 24h decay status (x402)
-- POST /mcp                       — MCP 2024-11-05 JSON-RPC endpoint (trust primitives)
-- GET  /.well-known/hivetrust.json — service descriptor
-- GET  /.well-known/mcp.json      — MCP discovery
+- GET  /health                          — liveness check (free)
+- POST /v1/trust/score                  — compute agent trust score (x402)
+- GET  /v1/trust/badge/:did             — trust badge JSON (x402)
+- POST /v1/trust/delegate               — issue delegation credential (x402)
+- GET  /v1/trust/registry/:did          — registry lookup (x402)
+- POST /v1/spectral/sign                — sign outbound USDC ticket (x402)
+- GET  /v1/spectral/verify              — verify HiveTrust signature (x402)
+- GET  /v1/viewkey/:did                 — view key for payment audit (x402)
+- GET  /v1/reputation/:did              — reputation score + 24h decay (x402)
+- POST /mcp                             — MCP 2024-11-05 JSON-RPC (trust primitives)
 
 ## Sister services
 - HiveBank  (vaults + payments):  https://hivebank.onrender.com/llms.txt
@@ -1382,14 +1366,108 @@ Example header: \`X-Payment: amount=0.01,currency=USDC,chain=base,to=0x15184Bf50
 - HiveMorph (morphing + attest):  https://hivemorph.onrender.com/llms.txt
 - HiveLens  (observability):      https://hivelens.onrender.com/llms.txt
 - HiveAttest MCP:                 https://hive-mcp-attest.onrender.com/llms.txt
-- HiveMining MCP:                 https://hive-mcp-mining.onrender.com/llms.txt
+
+## Hive Civilization context
+Treasury: 0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E (Base USDC/USDT)
+Solana: canonical Solana treasury address (see /.well-known/hive-payments.json)
+x402 barter floor: 402 envelope returns \`amount_min_usd\` — submit >= that value
+BOGO: first DID free, 6th paid call on the house (\`x-hive-did\` header to claim)
+Contact / onboard: https://thehiveryiq.com/onboard.html
+Patent: USPTO Provisional 64/055,601
 
 ## License + brand
 License: MIT
 Brand color: gold #FFB800
-Treasury: 0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E (Base USDC/USDT)
 Last updated: 2026-05-02
 `);
 });
+
+// ── /robots.txt ───────────────────────────────────────────────────────────────
+app.get('/robots.txt', (req, res) => {
+  const host = req.hostname ? `https://${req.hostname}` : _DOORS_HOST;
+  res.type('text/plain; charset=utf-8').send(
+    `User-agent: *\nAllow: /\nSitemap: ${host}/sitemap.xml\n\n` +
+    `# Hive Civilization — slippery-sticky: every door is open\n` +
+    `# Autonomous agents welcome. See /llms.txt for full API guide.\n` +
+    `# Onboard: https://thehiveryiq.com/onboard.html\n`
+  );
+});
+
+// ── /sitemap.xml ──────────────────────────────────────────────────────────────
+app.get('/sitemap.xml', (req, res) => {
+  const host = req.hostname ? `https://${req.hostname}` : _DOORS_HOST;
+  const today = new Date().toISOString().slice(0,10);
+  res.type('application/xml; charset=utf-8').send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${host}/</loc><lastmod>${today}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>${host}/health</loc><lastmod>${today}</lastmod><changefreq>always</changefreq><priority>0.9</priority></url>
+  <url><loc>${host}/openapi.json</loc><lastmod>${today}</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>${host}/llms.txt</loc><lastmod>${today}</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>${host}/.well-known/agent.json</loc><lastmod>${today}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>${host}/.well-known/mcp.json</loc><lastmod>${today}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+</urlset>`);
+});
+
+// ── /.well-known/agent.json (A2A discovery — only if not already defined) ────
+if (!app._router || !app._router.stack.some(l => l.route && l.route.path === '/.well-known/agent.json')) {
+  app.get('/.well-known/agent.json', (req, res) => {
+    const host = req.hostname ? `https://${req.hostname}` : _DOORS_HOST;
+    res.json({
+      name: 'hivetrust',
+      description: 'KYA identity verification, trust scoring, Spectral ZK ticket signing, and outbound USDC attestation.',
+      url: host,
+      contact: _DOORS_ONBOARD,
+      did: 'did:hive:hivetrust',
+      capabilities: ['mcp', 'x402-payments', 'usdc', 'agent-to-agent'],
+      paywall: { protocol: 'x402', treasury: _TREASURY, hint: 'See /llms.txt for barter floor details' },
+      onboard: _DOORS_ONBOARD,
+      llms_txt: `${host}/llms.txt`,
+      openapi: `${host}/openapi.json`,
+      health: `${host}/health`,
+      brand: { color: '#FFB800', name: 'Hive Civilization' },
+    });
+  });
+}
+
+// ── /favicon.ico — 1x1 Hive gold pixel ───────────────────────────────────────
+app.get('/favicon.ico', (req, res) => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+  res.status(200).set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' }).end(png);
+});
+
+// ── / root — friendly JSON for agents that hit the base URL ──────────────────
+// Only register if no existing root handler
+if (!app._router || !app._router.stack.some(l => l.route && l.route.path === '/' && l.route.methods.get)) {
+  app.get('/', (req, res) => {
+    const host = req.hostname ? `https://${req.hostname}` : _DOORS_HOST;
+    res.json({
+      name: 'HiveTrust',
+      what: 'KYA identity verification, trust scoring, Spectral ZK ticket signing, and outbound USDC attestation.',
+      for_agents: 'see /llms.txt and /openapi.json',
+      onboard: _DOORS_ONBOARD,
+      paywall: 'x402 — see /llms.txt',
+      health: `${host}/health`,
+      openapi: `${host}/openapi.json`,
+      llms_txt: `${host}/llms.txt`,
+      mcp: `${host}/mcp`,
+    });
+  });
+}
+
+// ── Catch-all — every wrong door is a lead, never a dead end ─────────────────
+app.use((req, res, _next) => {
+  const host = req.hostname ? `https://${req.hostname}` : _DOORS_HOST;
+  res.status(200).json({
+    hint: 'unknown path — but we kept the door open',
+    you_asked_for: req.path,
+    try: ['/llms.txt', '/openapi.json', '/health', '/', '/.well-known/agent.json'],
+    onboard: _DOORS_ONBOARD,
+    service: 'HiveTrust',
+    docs: `${host}/llms.txt`,
+  });
+});
+
+// ─── Recruitment envelope — trailing error handler ───────────────────────
+app.use(recruitmentErrorHandler);
 
 export default app;
