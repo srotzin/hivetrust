@@ -536,6 +536,8 @@ function isFreePath(path) {
       path.startsWith('/audit/receipt/') ||
       path === '/audit/list' ||
       path === '/audit/pubkey') return true;
+  // smash.prov routes — always free
+  if (path.startsWith('/prov/') || path === '/prov/pubkey' || path === '/prov/verify') return true;
   return false;
 }
 

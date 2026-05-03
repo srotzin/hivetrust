@@ -190,6 +190,7 @@ function isFreePath(path) {
   if (path === '/trust/register' || path === '/trust/issue-smsh' || path.startsWith('/trust/lookup')) return true;
   if (path.startsWith('/trust/schema/')) return true;
   if (path.startsWith('/trust/vc/supermodel')) return true;
+  if (path.startsWith('/prov/')) return true;
   return false;
 }
 

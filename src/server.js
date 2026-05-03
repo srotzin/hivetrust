@@ -24,6 +24,7 @@ import { rateLimitByDid } from './middleware/rate-limit.js';
 import authMiddleware from './middleware/auth.js';
 import x402Middleware from './middleware/x402.js';
 import mppMiddleware from './middleware/mpp.js';
+import { smashProvMiddleware, getPubkeyInfo as getProvPubkeyInfo, verifyProvSig } from './lib/prov.js';
 import auditLogger from './middleware/audit-logger.js';
 import apiRouter from './routes/api.js';
 import pricingRouter from './routes/pricing.js';
@@ -97,6 +98,21 @@ app.use(
 // 50mb limit for bulk telemetry ingestion
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// ── smash.prov middleware (BEFORE paywall) ─────────────────────────────────
+app.use(smashProvMiddleware);
+
+// ── /v1/prov routes (free, never paywalled) ─────────────────────────────────
+app.get('/v1/prov/pubkey', async (_req, res) => {
+  try { res.json(await getProvPubkeyInfo()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/v1/prov/verify', async (req, res) => {
+  try {
+    const { method, path: p, body_b64u = '', ts, sig_b64u } = req.body || {};
+    if (!method || !p || ts == null || !sig_b64u) return res.status(400).json({ error: 'missing fields' });
+    res.json(await verifyProvSig({ method, path: p, body_b64u, ts, sig_b64u }));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // Wrap any res.status(N>=400).json() with the recruitment envelope.
 app.use(recruitmentResponseWrapper);
