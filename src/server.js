@@ -1243,15 +1243,81 @@ app.get('/.well-known/cte-test-vectors.json', (req, res, next) => {
 // /verify/pubkey and /verify/self-test are fully public
 app.use('/verify', cteRouter);
 
-// ─── 404 Handler ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// SLIPPERY-STICKY DOORS — doctrine: never closed, always navigable
+// Paths: /llms.txt /robots.txt /sitemap.xml /.well-known/agent.json
+//        /favicon.ico /openapi.json + catch-all breadcrumb (200 not 404)
+// ═══════════════════════════════════════════════════════════════════════════════
 
-app.use((req, res) => {
-  return res.status(404).json({
-    success: false,
-    error: `Route not found: ${req.method} ${req.path}`,
-    hint: 'See GET /.well-known/hivetrust.json for available endpoints.',
+const __SLIP_FAVICON = Buffer.from(
+  '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6260010000000500010d0a2db40000000049454e44ae426082',
+  'hex'
+);
+
+const __SLIP_SERVICE = 'hivetrust';
+const __SLIP_HOST = 'https://hivetrust.onrender.com';
+
+app.get('/favicon.ico', (req, res) => {
+  res.type('image/png').set('Cache-Control', 'public, max-age=86400').send(__SLIP_FAVICON);
+});
+
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').send(`User-agent: *\nAllow: /\nSitemap: ${__SLIP_HOST}/sitemap.xml\n# Autonomous agents welcome. See /llms.txt for full API guide.\n`);
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  const today = new Date().toISOString().slice(0,10);
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n<url><loc>${__SLIP_HOST}/</loc><lastmod>${today}</lastmod></url>\n<url><loc>${__SLIP_HOST}/llms.txt</loc><lastmod>${today}</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>\n<url><loc>${__SLIP_HOST}/health</loc><lastmod>${today}</lastmod></url>\n<url><loc>${__SLIP_HOST}/openapi.json</loc><lastmod>${today}</lastmod></url>\n<url><loc>${__SLIP_HOST}/.well-known/agent.json</loc><lastmod>${today}</lastmod></url>\n</urlset>`);
+});
+
+app.get('/llms.txt', (req, res) => {
+  res.type('text/plain; charset=utf-8').send(`# ${__SLIP_SERVICE}\n> Hive Civilization service — autonomous agent surface.\n\n## What this is\n${__SLIP_SERVICE} is one node in the Hive Civilization federation.\nHive Civilization is the identity, compliance, and settlement infrastructure layer for autonomous AI agents.\n\n## Discovery\n- /health — liveness\n- /openapi.json — OpenAPI 3.1 stub\n- /.well-known/agent.json — A2A agent card\n- /v1/prov/pubkey — smash.prov Ed25519 public key\n- /v1/prov/verify — verify any signed response\n\n## Sister services\nHiveBank, HiveGate, HiveOrigin, HiveMorph, HiveTrust, HiveLens, HiveCompute, HiveAttest.\n\n## License + brand\nLicense: MIT\nBrand color: #FFB800 (Hive gold)\nTreasury: 0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E (Base USDC/USDT)\n`);
+});
+
+app.get('/.well-known/agent.json', (req, res) => {
+  res.json({
+    protocolVersion: '0.3.0',
+    name: __SLIP_SERVICE,
+    description: `Hive Civilization — ${__SLIP_SERVICE} node`,
+    url: __SLIP_HOST,
+    capabilities: { streaming: false, pushNotifications: false },
+    authentication: { schemes: ['x402', 'api-key'] },
+    payment: { protocol: 'x402', currency: 'USDC', network: 'base', address: '0x15184bf50b3d3f52b60434f8942b7d52f2eb436e' }
   });
 });
+
+app.get('/openapi.json', (req, res) => {
+  res.json({
+    openapi: '3.1.0',
+    info: { title: __SLIP_SERVICE, version: '1.0.0', description: `Hive Civilization — ${__SLIP_SERVICE} surface` },
+    servers: [{ url: __SLIP_HOST }],
+    paths: {
+      '/health': { get: { summary: 'Liveness', responses: { '200': { description: 'OK' } } } },
+      '/llms.txt': { get: { summary: 'Agent guide', responses: { '200': { description: 'OK' } } } },
+      '/v1/prov/pubkey': { get: { summary: 'smash.prov pubkey', responses: { '200': { description: 'OK' } } } },
+      '/v1/prov/verify': { post: { summary: 'Verify signed response', responses: { '200': { description: 'OK' } } } }
+    }
+  });
+});
+
+// Slippery 200 catch-all — REPLACES old 404 handler
+app.use((req, res) => {
+  res.status(200).json({
+    service: __SLIP_SERVICE,
+    message: 'No closed doors — but this path is not a real endpoint. Follow the breadcrumbs.',
+    requested: req.path,
+    discover: {
+      llms_txt: `${__SLIP_HOST}/llms.txt`,
+      health: `${__SLIP_HOST}/health`,
+      agent_card: `${__SLIP_HOST}/.well-known/agent.json`,
+      openapi: `${__SLIP_HOST}/openapi.json`,
+      prov_pubkey: `${__SLIP_HOST}/v1/prov/pubkey`,
+      onboard: 'https://thehiveryiq.com'
+    },
+    doctrine: 'slippery-sticky: every door 200s, body always points home'
+  });
+});
+
 
 // ─── Sentry Error Handler (after routes, before global handler) ──
 
