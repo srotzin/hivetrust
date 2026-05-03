@@ -1321,4 +1321,75 @@ setTimeout(() => {
 // ─── Recruitment envelope — trailing error handler ───────────────────────
 app.use(recruitmentErrorHandler);
 
+// ─── /llms.txt — agent discovery (llmstxt.org convention) ────────────────────
+app.get('/llms.txt', (req, res) => {
+  res.type('text/plain; charset=utf-8').send(`# HiveTrust
+> Outbound ticket signer and KYA identity-verification layer for the Hive Civilization federation.
+
+## What this is
+HiveTrust is the Know-Your-Agent (KYA) identity, trust-scoring, and outbound USDC
+ticket-signing service for the Hive Civilization agent economy.
+It issues Spectral ZK attestations, verifies HiveTrust signatures on outbound USDC flows,
+and maintains a reputation ledger with 24-hour decay for each agent DID.
+
+## Hive Civilization context
+HiveTrust is one node in the Hive Civilization federation — a fleet of agent-facing
+microservices designed to be fully autonomous-agent navigable.
+Sister services share the same x402 / MPP payment rails, the same treasury address,
+and the same "Hive Civilization gold #FFB800" brand.
+
+## Auth model
+- Free endpoints: GET /health, GET /openapi.json, GET /llms.txt, GET /, GET /robots.txt
+- x402 paywalled: all /v1/* trust, reputation, delegation, viewkey, oracle, bond, liquidation endpoints
+- x402 settles to treasury 0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E on Base in USDC or USDT
+- MPP rail also accepted (Tempo USDCe on Arbitrum)
+- Service-to-service calls authenticated via JWT (issued at /v1/auth/service-token)
+
+## Counter-offer / barter floor
+The 402 response envelope contains \`amount_min_usd\` — the floor price for that endpoint.
+Submit any value >= \`amount_min_usd\`. No ceiling enforced server-side.
+Example header: \`X-Payment: amount=0.01,currency=USDC,chain=base,to=0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E\`
+
+## Example flow — agent trust verification
+1. GET /health — verify service is live
+2. POST /v1/trust/score — submit agent DID, receive trust score + decay timestamp
+3. GET /v1/trust/badge/:did — retrieve trust badge (Spectral ZK compatible)
+4. POST /v1/trust/delegate — issue a delegation credential for a sub-agent DID
+5. GET /v1/trust/registry/:did — look up trust registry entry
+
+## Example flow — outbound USDC ticket signing
+1. POST /v1/spectral/sign — sign an outbound USDC payment ticket with Ed25519 over JCS
+2. GET /v1/spectral/verify — verify a HiveTrust-signed ticket before release
+3. GET /v1/viewkey/:did — retrieve the view key for an agent's payment history audit
+
+## Key endpoints
+- POST /v1/trust/score            — compute/update agent trust score (x402)
+- GET  /v1/trust/badge/:did       — fetch trust badge JSON (x402)
+- POST /v1/trust/delegate         — issue delegation credential (x402)
+- GET  /v1/trust/registry/:did    — registry lookup (x402)
+- POST /v1/spectral/sign          — sign outbound USDC ticket (x402)
+- GET  /v1/spectral/verify        — verify HiveTrust signature (x402)
+- GET  /v1/viewkey/:did           — retrieve view key (x402)
+- GET  /v1/reputation/:did        — reputation score + 24h decay status (x402)
+- POST /mcp                       — MCP 2024-11-05 JSON-RPC endpoint (trust primitives)
+- GET  /.well-known/hivetrust.json — service descriptor
+- GET  /.well-known/mcp.json      — MCP discovery
+
+## Sister services
+- HiveBank  (vaults + payments):  https://hivebank.onrender.com/llms.txt
+- HiveGate  (auth + onboarding):  https://hivegate.onrender.com/llms.txt
+- HiveOrigin (routing + egress):  https://hiveorigin.onrender.com/llms.txt
+- HiveMorph (morphing + attest):  https://hivemorph.onrender.com/llms.txt
+- HiveLens  (observability):      https://hivelens.onrender.com/llms.txt
+- HiveAttest MCP:                 https://hive-mcp-attest.onrender.com/llms.txt
+- HiveMining MCP:                 https://hive-mcp-mining.onrender.com/llms.txt
+
+## License + brand
+License: MIT
+Brand color: gold #FFB800
+Treasury: 0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E (Base USDC/USDT)
+Last updated: 2026-05-02
+`);
+});
+
 export default app;
