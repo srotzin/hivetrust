@@ -23,11 +23,6 @@ const STREAM_PRICING = {
     description: 'Real-time construction material and labor cost indices',
     pricing: { 24: 0.50, 72: 1.20, 168: 2.00 },
   },
-  simpson_catalog: {
-    name: 'Simpson Catalog',
-    description: 'Simpson Strong-Tie product catalog with specs and availability',
-    pricing: { 24: 0.30, 72: 0.75, 168: 1.25 },
-  },
   compliance_feeds: {
     name: 'Compliance Feeds',
     description: 'Regulatory compliance updates and building code changes',
