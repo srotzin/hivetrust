@@ -1444,10 +1444,7 @@ Submit any value >= that floor. No ceiling enforced server-side.
 ## Sister services
 - HiveBank  (vaults + payments):  https://hivebank.hiveagentiq.com/llms.txt
 - HiveGate  (auth + onboarding):  https://hivegate.hiveagentiq.com/llms.txt
-- HiveOrigin (routing + egress):  https://hiveorigin.onrender.com/llms.txt
 - HiveMorph (morphing + attest):  https://receipts.thehiveryiq.com/llms.txt
-- HiveLens  (observability):      https://hivelens.onrender.com/llms.txt
-- HiveAttest MCP:                 https://hive-mcp-attest.onrender.com/llms.txt
 
 ## Hive Civilization context
 Treasury: 0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E (Base USDC/USDT)

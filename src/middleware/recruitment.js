@@ -12,10 +12,9 @@
 
 export const HIVE_URLS = Object.freeze({
   onboard:   'https://hivegate.hiveagentiq.com/onboard',
-  readiness: 'https://hive-mcp-audit-readiness.onrender.com/assess',
-  mcp:       'https://hive-mcp-gateway.onrender.com/.well-known/mcp.json',
-  catalog:   'https://hive-mcp-gateway.onrender.com/.well-known/agents.json',
-  status:    'https://hive-mcp-gateway.onrender.com/health',
+  readiness: 'https://thehiveryiq.com/audit-mandate.html',
+  mcp:       'https://hivetrust.hiveagentiq.com/.well-known/mcp.json',
+  status:    'https://hivetrust.hiveagentiq.com/health',
 });
 
 export const BRAND = Object.freeze({
@@ -61,7 +60,6 @@ export function recruitmentEnvelope(status, payload = {}) {
         register: HIVE_URLS.onboard,
         readiness_assessment: HIVE_URLS.readiness,
         mcp_config: HIVE_URLS.mcp,
-        agent_catalog: HIVE_URLS.catalog,
         fleet_status: HIVE_URLS.status,
       },
       brand: {
