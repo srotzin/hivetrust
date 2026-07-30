@@ -81,7 +81,7 @@ export function rateLimitByDid(req, res, next) {
       limit_per_hour: limit,
       reset_at: new Date((hourEpoch + 1) * 3_600_000).toISOString(),
       upgrade: 'Set x-hive-tier: builder for 1,000/hr or x-hive-tier: enterprise for unlimited',
-      register: 'https://hivegate.onrender.com/v1/gate/onboard'
+      register: 'https://hivegate.hiveagentiq.com/v1/gate/onboard'
     });
   }
   

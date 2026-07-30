@@ -9,7 +9,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: HIVETRUST_HOST
-        value: https://hivetrust.onrender.com
+        value: https://hivetrust.hiveagentiq.com
       - key: PORT
         value: 3001
       - key: HIVEAGENT_URL

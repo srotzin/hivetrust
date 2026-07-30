@@ -28,15 +28,15 @@ const PAYMENT_ADDRESS = (process.env.HIVE_PAYMENT_ADDRESS || process.env.HIVETRU
 const USDC_CONTRACT = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const BASE_RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-const SPECTRAL_RECEIPT_URL = 'https://hive-receipt.onrender.com/v1/receipt/sign';
+const SPECTRAL_RECEIPT_URL = 'https://inkframe.thehiveryiq.com/v1/receipt/sign';
 const HIVE_INTERNAL_KEY = process.env.HIVETRUST_SERVICE_KEY || process.env.HIVE_INTERNAL_KEY || '';
 
 // Downstream service URLs
-const HIVETRUST_HOST = process.env.HIVETRUST_HOST || 'https://hivetrust.onrender.com';
+const HIVETRUST_HOST = process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com';
 const AML_HOST = process.env.AML_HOST || 'https://hive-mcp-aml-screen.onrender.com';
 const INSURANCE_HOST = process.env.INSURANCE_HOST || 'https://hive-mcp-insurance.onrender.com';
 const IDENTITY_HOST = process.env.IDENTITY_HOST || 'https://hive-mcp-identity.onrender.com';
-const RECEIPT_HOST = process.env.RECEIPT_HOST || 'https://hive-receipt.onrender.com';
+const RECEIPT_HOST = process.env.RECEIPT_HOST || 'https://inkframe.thehiveryiq.com';
 
 // ─── BOGO / first-call tracking (in-memory) ─────────────────
 // Production: swap for DB-backed per-DID call log.

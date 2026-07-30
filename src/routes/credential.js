@@ -103,7 +103,7 @@ function bytesToBase64url(bytes) {
 
 const RECEIPT_ENDPOINT = process.env.RECEIPT_HOST
   ? `${process.env.RECEIPT_HOST}/v1/receipt/sign`
-  : 'https://hive-receipt.onrender.com/v1/receipt/sign';
+  : 'https://inkframe.thehiveryiq.com/v1/receipt/sign';
 
 async function emitReceipt({ path, amount, eventType, refId }) {
   try {

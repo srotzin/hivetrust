@@ -35,7 +35,7 @@ The token `claim_type` appears in two independent schemas with two different sem
   "type": "TrustAttestation",
   "version": "1.0.0",
   "claim_type": "authority",              // CTEF envelope-level (layer discriminator)
-  "provider": { "id": "did:web:hivetrust.onrender.com", "category": "parametric-insurance" },
+  "provider": { "id": "did:web:hivetrust.hiveagentiq.com", "category": "parametric-insurance" },
   "subject": { "did": "did:hive:<uuid>" },
   "attestation": {
     "payload": {

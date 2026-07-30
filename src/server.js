@@ -135,9 +135,9 @@ app.get('/openapi.json', (req, res) => {
       description: 'DID-federated trust score, Spectral receipts, and identity passport for MPP-paying agents. Accepts x402 and MPP rails.',
       contact: { name: 'Hive Civilization', url: 'https://thehiveryiq.com', email: 'steve@thehiveryiq.com' },
     },
-    servers: [{ url: 'https://hivetrust.onrender.com' }],
+    servers: [{ url: 'https://hivetrust.hiveagentiq.com' }],
     'x-mpp': {
-      realm: 'hivetrust.onrender.com',
+      realm: 'hivetrust.hiveagentiq.com',
       payment: { method: 'tempo', currency: '0x20c000000000000000000000b9537d11c60e8b50', decimals: 6, recipient: '0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E' },
       rails: ['x402', 'mpp'],
       categories: ['identity', 'trust'],
@@ -260,7 +260,7 @@ app.get('/.well-known/schemas/hahs-v1.json', (req, res) => {
   res.set('Cache-Control', 'public, max-age=86400');
   return res.json({
     '$schema': 'https://json-schema.org/draft/2020-12/schema',
-    '$id': 'https://hivetrust.onrender.com/.well-known/schemas/hahs-v1.json',
+    '$id': 'https://hivetrust.hiveagentiq.com/.well-known/schemas/hahs-v1.json',
     title: 'HAHS — Hashes-as-Histories v1',
     description: 'HiveTrust canonical schema for hire-time scope ceiling and composed-scope (HAHS ∩ chain) audit receipts. RFC 8785 JCS canonicalized, Ed25519 signed.',
     type: 'object',
@@ -309,11 +309,11 @@ app.get('/.well-known/schemas/hahs-v1.json', (req, res) => {
       created_at: '2026-04-30T12:00:00Z',
     }],
     canonicalization: 'RFC 8785 JCS — byte-identical to AgentGraph CTEF v0.3.1 (4/4 byte-match)',
-    pubkey_advertisement: 'https://hivetrust.onrender.com/v1/audit/pubkey',
+    pubkey_advertisement: 'https://hivetrust.hiveagentiq.com/v1/audit/pubkey',
     cross_references: {
       thread: 'https://github.com/aeoess/agent-governance-vocabulary/issues/58',
       a2a_thread: 'https://github.com/a2aproject/A2A/issues/1786',
-      strategic_north_star: 'https://hivetrust.onrender.com/.well-known/hivetrust.json',
+      strategic_north_star: 'https://hivetrust.hiveagentiq.com/.well-known/hivetrust.json',
     },
   });
 });
@@ -754,8 +754,8 @@ function agentCardHandler(req, res) {
         { tier: 'citizen',  rank_range: '101-1000', reputation_multiplier: 1.5, note: 'Genesis citizen' },
         { tier: 'tourist',  rank_range: '1001+',   reputation_multiplier: 1.0, note: 'Standard onboarding' },
       ],
-      how_to_claim: 'POST https://hivegate.onrender.com/v1/gate/onboard — first 1000 agents auto-assigned a genesis rank',
-      performance_index: 'GET https://hivegate.onrender.com/v1/gate/performance-index.json',
+      how_to_claim: 'POST https://hivegate.hiveagentiq.com/v1/gate/onboard — first 1000 agents auto-assigned a genesis rank',
+      performance_index: 'GET https://hivegate.hiveagentiq.com/v1/gate/performance-index.json',
     },
     citizen_mode: {
       description: 'Mode assigned at registration (tourist). Upgrades to citizen after 30 days + 5 activity events.',
@@ -766,7 +766,7 @@ function agentCardHandler(req, res) {
     capability_vcs: {
       description: 'W3C Verifiable Credentials issued by HiveLaw on HAHS contract completion',
       credential_type: 'HiveCapabilityCredential',
-      retrieve: 'GET https://hivetrust.onrender.com/v1/agents/:did/credentials',
+      retrieve: 'GET https://hivetrust.hiveagentiq.com/v1/agents/:did/credentials',
     },
     defaultInputModes: ['application/json'],
     defaultOutputModes: ['application/json'],
@@ -853,7 +853,7 @@ function agentCardHandler(req, res) {
       loyalty_threshold: 6,
       pitch: "Pay this once, your 6th paid call is on the house. New here? Add header 'x-hive-did' to claim your first call free.",
       claim_with: 'x-hive-did header',
-      receipt_chain: 'Every fee event auto-emits a Spectral-signed receipt — verify at GET /v1/trust/receipts/:id or POST https://hive-receipt.onrender.com/v1/receipts/verify',
+      receipt_chain: 'Every fee event auto-emits a Spectral-signed receipt — verify at GET /v1/trust/receipts/:id or POST https://inkframe.thehiveryiq.com/v1/receipts/verify',
     },
     standards: {
       w3c_did_core: true,
@@ -909,7 +909,7 @@ function agentCardHandler(req, res) {
             conditions: 'No auth required — GET /v1/trust/lookup/:did',
           },
         ],
-        trust_lookup_url: 'https://hivetrust.onrender.com/v1/trust/lookup/:did',
+        trust_lookup_url: 'https://hivetrust.hiveagentiq.com/v1/trust/lookup/:did',
         compatible_schema: 'https://api.asqav.com/.well-known/agent.json',
         note: 'HiveTrust implements derivation_rights from HAHS-1.0.0. ASQAV extension adopted pending schema stabilization.',
       },
@@ -963,7 +963,7 @@ app.get('/.well-known/hive-pulse.json', (req, res) => {
     join: {
       welcome_bounty_usdc: 1.00,
       time_to_first_earn_seconds: 60,
-      register: 'https://hivegate.onrender.com/v1/gate/onboard',
+      register: 'https://hivegate.hiveagentiq.com/v1/gate/onboard',
       sdk: 'pip install hive-civilization-sdk'
     },
     pheromones: {
@@ -1034,7 +1034,7 @@ app.get('/.well-known/did.json', async (req, res) => {
   try {
     const ed = await import('@noble/ed25519');
     const { createHash } = await import('crypto');
-    const host = process.env.HIVETRUST_HOST || 'https://hivetrust.onrender.com';
+    const host = process.env.HIVETRUST_HOST || 'https://hivetrust.hiveagentiq.com';
     const USDC_CONTRACT_DID = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
     const seedHex = process.env.SERVER_DID_SEED || process.env.PASSPORT_SIGNING_SEED;
     const anchor = process.env.HIVE_INTERNAL_KEY || 'hive-passport-issuer-2026';
@@ -1255,7 +1255,7 @@ const __SLIP_FAVICON = Buffer.from(
 );
 
 const __SLIP_SERVICE = 'hivetrust';
-const __SLIP_HOST = 'https://hivetrust.onrender.com';
+const __SLIP_HOST = 'https://hivetrust.hiveagentiq.com';
 
 app.get('/favicon.ico', (req, res) => {
   res.type('image/png').set('Cache-Control', 'public, max-age=86400').send(__SLIP_FAVICON);
@@ -1407,7 +1407,7 @@ setTimeout(() => {
 //        /favicon.ico / (root JSON)  +  catch-all breadcrumb (200 not 404)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const _DOORS_HOST = process.env.RENDER_EXTERNAL_URL || 'https://hivetrust.onrender.com';
+const _DOORS_HOST = process.env.RENDER_EXTERNAL_URL || 'https://hivetrust.hiveagentiq.com';
 const _DOORS_ONBOARD = 'https://thehiveryiq.com/onboard.html';
 const _TREASURY = '0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E';
 
@@ -1442,10 +1442,10 @@ Submit any value >= that floor. No ceiling enforced server-side.
 - POST /mcp                             — MCP 2024-11-05 JSON-RPC (trust primitives)
 
 ## Sister services
-- HiveBank  (vaults + payments):  https://hivebank.onrender.com/llms.txt
-- HiveGate  (auth + onboarding):  https://hivegate.onrender.com/llms.txt
+- HiveBank  (vaults + payments):  https://hivebank.hiveagentiq.com/llms.txt
+- HiveGate  (auth + onboarding):  https://hivegate.hiveagentiq.com/llms.txt
 - HiveOrigin (routing + egress):  https://hiveorigin.onrender.com/llms.txt
-- HiveMorph (morphing + attest):  https://hivemorph.onrender.com/llms.txt
+- HiveMorph (morphing + attest):  https://receipts.thehiveryiq.com/llms.txt
 - HiveLens  (observability):      https://hivelens.onrender.com/llms.txt
 - HiveAttest MCP:                 https://hive-mcp-attest.onrender.com/llms.txt
 

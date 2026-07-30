@@ -272,6 +272,6 @@ export async function verifyBadgeDocument(badgeDoc) {
     presented: { score: badgeDoc.score, grade: badgeDoc.grade, issued_at: badgeDoc.issued_at },
     current:   { score: fresh.score, grade: fresh.grade, computed_at: fresh.computed_at },
     drift,
-    pubkey_advertised: 'https://hivetrust.onrender.com/v1/audit/pubkey',
+    pubkey_advertised: 'https://hivetrust.hiveagentiq.com/v1/audit/pubkey',
   };
 }

@@ -99,8 +99,8 @@ router.get('/streams/simpson', async (req, res) => {
         stream: 'simpson_catalog',
         description: '50 verified Simpson Strong-Tie structural products with ICC-ES reports, load tables, and installation specs. Machine-readable. ZK-verified provenance. x402 payment rail.',
         price: '$0.30 USDC per 24h lease',
-        get_lease: 'POST https://hivetrust.onrender.com/v1/oracle/create-lease',
-        get_did_first: 'https://hivegate.onrender.com/v1/gate/onboard',
+        get_lease: 'POST https://hivetrust.hiveagentiq.com/v1/oracle/create-lease',
+        get_did_first: 'https://hivegate.hiveagentiq.com/v1/gate/onboard',
         why_hive: 'The only place where structural data comes with a built-in payment rail and verifiable provenance. No hallucinations. Every product ICC-ES verified.',
         sample: SIMPSON_CATALOG.slice(0, 3),
       });
@@ -116,8 +116,8 @@ router.get('/streams/simpson', async (req, res) => {
         reason: verification.reason,
         description: '50 verified Simpson Strong-Tie structural products with ICC-ES reports, load tables, and installation specs. Machine-readable. ZK-verified provenance. x402 payment rail.',
         price: '$0.30 USDC per 24h lease',
-        get_lease: 'POST https://hivetrust.onrender.com/v1/oracle/create-lease',
-        get_did_first: 'https://hivegate.onrender.com/v1/gate/onboard',
+        get_lease: 'POST https://hivetrust.hiveagentiq.com/v1/oracle/create-lease',
+        get_did_first: 'https://hivegate.hiveagentiq.com/v1/gate/onboard',
         why_hive: 'The only place where structural data comes with a built-in payment rail and verifiable provenance. No hallucinations. Every product ICC-ES verified.',
         sample: SIMPSON_CATALOG.slice(0, 3),
       });

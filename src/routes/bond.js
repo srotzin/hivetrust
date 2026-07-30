@@ -219,8 +219,8 @@ router.get('/verify-collateral/:did', async (req, res) => {
       covers_up_to_usdc:     coversUpTo,
       balance_hidden:        true,
       settlement_rail:       'USDC on Base L2',
-      arbitration_url:       'https://hivelaw.onrender.com/v1/disputes/file',
-      slashing_url:          'https://hivetrust.onrender.com/v1/bond/slash',
+      arbitration_url:       'https://hivelaw.hiveagentiq.com/v1/disputes/file',
+      slashing_url:          'https://hivetrust.hiveagentiq.com/v1/bond/slash',
       verified_at:           new Date().toISOString(),
       response_time_ms:      Date.now() - t0,
     });

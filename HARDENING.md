@@ -135,7 +135,7 @@ Then:
 1. Paste `SPECTRAL_ISSUER_SK_B64U` into HiveTrust's Render env, mark sensitive.
 2. Paste `SPECTRAL_VERIFIER_PK_B64U` into Hivebank's Render env. (Public, but treat as integrity-critical.)
 3. Restart both services. Do NOT redeploy from a stale build.
-4. Smoke test: `curl https://hivetrust.onrender.com/v1/trust/spectral/pubkey` should return the same pubkey you set on hivebank.
+4. Smoke test: `curl https://hivetrust.hiveagentiq.com/v1/trust/spectral/pubkey` should return the same pubkey you set on hivebank.
 5. Smoke test (round-trip): mint a ticket, send a tiny self-test USDC of $0.01 through hivebank with the ticket header.
 
 ## Rotation

@@ -579,7 +579,7 @@ router.get('/insurance/zk-coverage/:did', async (req, res) => {
         proof:         null,
         coverage_hidden: true,
         policy_status: 'none',
-        claim_url:     'https://hivetrust.onrender.com/v1/insurance/claims',
+        claim_url:     'https://hivetrust.hiveagentiq.com/v1/insurance/claims',
         verified_at:   new Date().toISOString(),
         response_time_ms: Date.now() - t0,
       });
@@ -601,7 +601,7 @@ router.get('/insurance/zk-coverage/:did', async (req, res) => {
       proof,
       coverage_hidden: true,
       policy_status:   'active',
-      claim_url:       'https://hivetrust.onrender.com/v1/insurance/claims',
+      claim_url:       'https://hivetrust.hiveagentiq.com/v1/insurance/claims',
       verified_at:     new Date().toISOString(),
       response_time_ms: Date.now() - t0,
     });
@@ -796,7 +796,7 @@ router.post('/enterprise/subscribe', async (req, res) => {
       network: 'base',
       payment_verified: req.paymentVerified || false,
       payment_method: req.paymentMethod || null,
-      receipt_endpoint: 'POST https://hive-receipt.onrender.com/v1/receipts/sign',
+      receipt_endpoint: 'POST https://inkframe.thehiveryiq.com/v1/receipts/sign',
       _hive: { service: 'hivetrust', protocol: 'x402', treasury: '0x15184Bf50B3d3F52b60434f8942b7D52F2eB436E' },
     });
   } catch (e) {

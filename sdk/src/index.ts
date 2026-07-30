@@ -24,7 +24,7 @@ export class HiveClient {
     };
 
     this.trust = new HiveTrustClient({
-      baseUrl: config.hiveTrustUrl ?? 'https://hivetrust.onrender.com',
+      baseUrl: config.hiveTrustUrl ?? 'https://hivetrust.hiveagentiq.com',
       ...shared,
     });
 
@@ -39,7 +39,7 @@ export class HiveClient {
     });
 
     this.law = new HiveLawClient({
-      baseUrl: config.hiveLawUrl ?? 'https://hivelaw.onrender.com',
+      baseUrl: config.hiveLawUrl ?? 'https://hivelaw.hiveagentiq.com',
       ...shared,
     });
 

@@ -296,7 +296,7 @@ Patent applications 64/049,200 – 64/049,226, priority 2026-04-24, holder: Step
 
 | Route | Method | Auth | Description |
 |-------|--------|------|-------------|
-| [`/.well-known/cte-test-vectors.json`](https://hivetrust.onrender.com/.well-known/cte-test-vectors.json) | GET | Public | CTEF v0.3.1 fixture with all 4 vectors |
+| [`/.well-known/cte-test-vectors.json`](https://hivetrust.hiveagentiq.com/.well-known/cte-test-vectors.json) | GET | Public | CTEF v0.3.1 fixture with all 4 vectors |
 | `/verify` | GET `?did=` | Free (1st/day) | HiveTrust passport tier lookup |
 | `/verify` | POST | 10/day free, then $0.01 USDC | Structural verification of a CTEF envelope |
 | `/verify/pubkey` | GET | Public | Ed25519 attestation pubkey for Apr 30 byte-match |
@@ -305,7 +305,7 @@ Patent applications 64/049,200 – 64/049,226, priority 2026-04-24, holder: Step
 ### CTEF Fixture
 
 ```bash
-curl https://hivetrust.onrender.com/.well-known/cte-test-vectors.json | jq '.version'
+curl https://hivetrust.hiveagentiq.com/.well-known/cte-test-vectors.json | jq '.version'
 # "0.3.1"
 ```
 
@@ -313,7 +313,7 @@ curl https://hivetrust.onrender.com/.well-known/cte-test-vectors.json | jq '.ver
 
 ```bash
 # First 10 requests/day per IP are free
-curl -X POST https://hivetrust.onrender.com/verify \
+curl -X POST https://hivetrust.hiveagentiq.com/verify \
   -H 'Content-Type: application/json' \
   -d '{"type":"TrustAttestation","version":"0.3.1","claim_type":"authority",...}'
 
@@ -326,7 +326,7 @@ Beyond 10 free requests/day, the endpoint returns HTTP 402 with an x402 payment 
 ### Self-Test
 
 ```bash
-curl https://hivetrust.onrender.com/verify/self-test | jq '.data.summary'
+curl https://hivetrust.hiveagentiq.com/verify/self-test | jq '.data.summary'
 ```
 
 ### Canonicalization
@@ -517,4 +517,4 @@ This repository is part of the **DEFENSIBLE** pillar.
 
 - thehiveryiq.com
 - hiveagentiq.com
-- agent-card: https://hivetrust.onrender.com/.well-known/agent-card.json
+- agent-card: https://hivetrust.hiveagentiq.com/.well-known/agent-card.json

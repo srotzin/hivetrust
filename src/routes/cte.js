@@ -461,7 +461,7 @@ router.get('/cte-test-vectors.json', (req, res) => {
   return res.json({
     version: '0.3.1',
     spec: 'CTEF (Composable Trust Evidence Format)',
-    provider: 'did:web:hivetrust.onrender.com',
+    provider: 'did:web:hivetrust.hiveagentiq.com',
     consortium_seat: {
       rank: 5,
       members: ['AgentGraph', 'AgentID', 'APS', 'Nobulex', 'HiveTrust'],
@@ -489,7 +489,7 @@ router.get('/cte-test-vectors.json', (req, res) => {
       ],
       hash_algorithm: 'SHA-256',
       delegation_chain_root: 'hex(sha256(canonicalize_jcs_strict(delegation_chain)))',
-      reference_implementation: 'src/routes/cte.js canonicalizeJcs() (hivetrust.onrender.com)',
+      reference_implementation: 'src/routes/cte.js canonicalizeJcs() (hivetrust.hiveagentiq.com)',
     },
     claim_model: {
       claim_type: {
@@ -603,12 +603,12 @@ router.get('/verify', async (req, res) => {
     passport_tier: tierInfo.tier,
     trust_score: mockScore,
     tier_description: tierInfo.description,
-    provider: 'did:web:hivetrust.onrender.com',
+    provider: 'did:web:hivetrust.hiveagentiq.com',
     attestation_pubkey: pubkey,
     free_lookup: lookupCount === 1,
     lookups_today: lookupCount,
     ctef_version: '0.3.1',
-    fixture_url: 'https://hivetrust.onrender.com/.well-known/cte-test-vectors.json',
+    fixture_url: 'https://hivetrust.hiveagentiq.com/.well-known/cte-test-vectors.json',
     note: lookupCount === 1
       ? 'First passport lookup today is free.'
       : 'Subsequent lookups require payment via POST /verify.',
@@ -693,7 +693,7 @@ router.post('/verify', async (req, res) => {
     canonical_bytes_utf8: result.canonical_bytes_utf8,
     canonical_sha256: result.canonical_sha256,
     ctef_version: '0.3.1',
-    provider: 'did:web:hivetrust.onrender.com',
+    provider: 'did:web:hivetrust.hiveagentiq.com',
     attestation_pubkey: pubkey,
     free_tier: { used: count, limit: 10, period: 'per IP per day', paid: !free },
   });
@@ -709,11 +709,11 @@ router.get('/verify/pubkey', async (req, res) => {
     algorithm: 'Ed25519',
     encoding: 'hex',
     purpose: 'CTEF v0.3.1 attestation signing — Apr 30 byte-match verifier discovery',
-    provider: 'did:web:hivetrust.onrender.com',
+    provider: 'did:web:hivetrust.hiveagentiq.com',
     ctef_version: '0.3.1',
     consortium_seat: 5,
     consortium_members: ['AgentGraph', 'AgentID', 'APS', 'Nobulex', 'HiveTrust'],
-    key_id: `did:web:hivetrust.onrender.com#ctef-signing-key-1`,
+    key_id: `did:web:hivetrust.hiveagentiq.com#ctef-signing-key-1`,
     note: process.env.HIVETRUST_SIGNING_KEY
       ? 'Production key from HIVETRUST_SIGNING_KEY env var.'
       : 'Dev fallback key — set HIVETRUST_SIGNING_KEY in production.',
@@ -788,7 +788,7 @@ router.get('/verify/self-test', (req, res) => {
     byte_match_gaps: byteMatchGaps.length > 0 ? byteMatchGaps : null,
     vectors: results,
     ctef_version: '0.3.1',
-    provider: 'did:web:hivetrust.onrender.com',
+    provider: 'did:web:hivetrust.hiveagentiq.com',
     canonicalizer: 'RFC 8785 JCS — inline implementation in src/routes/cte.js',
     consortium_seat: 5,
     reference: 'https://agentgraph.co/.well-known/cte-test-vectors.json',

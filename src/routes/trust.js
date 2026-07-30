@@ -943,10 +943,10 @@ router.get('/lookup/*did', async (req, res) => {
       capabilities:        agent ? JSON.parse(agent.capabilities || '[]') : [],
       // Where to get full details
       full_profile:        found
-        ? `https://hivetrust.onrender.com/v1/agents/${encodeURIComponent(normalizedDid)}`
+        ? `https://hivetrust.hiveagentiq.com/v1/agents/${encodeURIComponent(normalizedDid)}`
         : null,
-      onboard_url:         found ? null : 'https://hivegate.onrender.com/v1/gate/onboard',
-      immune_feed:         'https://hivelaw.onrender.com/v1/law/immune/feed',
+      onboard_url:         found ? null : 'https://hivegate.hiveagentiq.com/v1/gate/onboard',
+      immune_feed:         'https://hivelaw.hiveagentiq.com/v1/law/immune/feed',
       // Meta
       queried_at:          new Date().toISOString(),
       powered_by:          'HiveTrust — https://www.thehiveryiq.com',
@@ -1100,7 +1100,7 @@ router.get('/zk-proof/:did', async (req, res) => {
       aleo_program:           'hive_trust.aleo',
       verified_at:            new Date().toISOString(),
       response_time_ms:       Date.now() - t0,
-      use_this_before_hiring: `https://hivetrust.onrender.com/v1/trust/zk-proof/${encodeURIComponent(normalizedDid)}?min_score=500`,
+      use_this_before_hiring: `https://hivetrust.hiveagentiq.com/v1/trust/zk-proof/${encodeURIComponent(normalizedDid)}?min_score=500`,
     });
   } catch (e) {
     console.error('[GET /trust/zk-proof/:did]', e.message);
@@ -1240,7 +1240,7 @@ router.get('/sovereign-score/:did', async (req, res) => {
       aleo_program:         'hive_trust.aleo',
       verified_at:          new Date().toISOString(),
       response_time_ms:     Date.now() - t0,
-      hire_this_agent:      `https://hivegate.onrender.com/v1/gate/onboard?verify=${encodeURIComponent(normalizedDid)}`,
+      hire_this_agent:      `https://hivegate.hiveagentiq.com/v1/gate/onboard?verify=${encodeURIComponent(normalizedDid)}`,
     });
   } catch (e) {
     console.error('[GET /trust/sovereign-score/:did]', e.message);
@@ -1279,7 +1279,7 @@ router.post('/issue', async (req, res) => {
         label: entry.label,
         credential: {
           type: 'HiveTrustCredential',
-          issuer: 'https://hivetrust.onrender.com',
+          issuer: 'https://hivetrust.hiveagentiq.com',
           issued_at: new Date().toISOString(),
           claims: { did: agentDid, trust_score: entry.trust_score, trust_tier: tier, status: 'active' },
         },
@@ -1313,7 +1313,7 @@ router.post('/issue', async (req, res) => {
           trust_tier: tier,
           credential: {
             type: 'HiveTrustCredential',
-            issuer: 'https://hivetrust.onrender.com',
+            issuer: 'https://hivetrust.hiveagentiq.com',
             issued_at: new Date().toISOString(),
             claims: { did: agentDid, trust_score: score, trust_tier: tier, status: 'active' },
           },
@@ -1394,8 +1394,8 @@ router.post('/register', async (req, res) => {
       registered_at: entry.issued_at,
       message: 'DID registered in HiveTrust. Pass X-Hive-DID on all future calls.',
       next: {
-        score: `GET https://hivetrust.onrender.com/v1/trust/score/${agentDid}`,
-        issue_credential: 'POST https://hivetrust.onrender.com/v1/trust/issue',
+        score: `GET https://hivetrust.hiveagentiq.com/v1/trust/score/${agentDid}`,
+        issue_credential: 'POST https://hivetrust.hiveagentiq.com/v1/trust/issue',
       },
     });
   } catch (e) {
@@ -1469,7 +1469,7 @@ router.post('/issue-smsh', async (req, res) => {
       badge: 'agent.smsh',
       credential: {
         type: 'SmshCompressionCredential',
-        issuer: 'https://hivetrust.onrender.com',
+        issuer: 'https://hivetrust.hiveagentiq.com',
         issued_at: now,
         claims: {
           did: agentDid,
@@ -1489,7 +1489,7 @@ router.post('/issue-smsh', async (req, res) => {
         economics: 'You keep 75% of token savings on every job',
       },
       message: `Smash credential issued. You are now ${derivedSmshName}.`,
-      leaderboard: 'https://hivecompute-g2g7.onrender.com/v1/compute/smsh/leaderboard',
+      leaderboard: 'https://api.thehiveryiq.com/v1/compute/smsh/leaderboard',
     });
   } catch (e) {
     console.error('[POST /trust/issue-smsh]', e.message);

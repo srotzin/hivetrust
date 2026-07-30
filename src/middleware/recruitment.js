@@ -11,7 +11,7 @@
  */
 
 export const HIVE_URLS = Object.freeze({
-  onboard:   'https://hivegate.onrender.com/onboard',
+  onboard:   'https://hivegate.hiveagentiq.com/onboard',
   readiness: 'https://hive-mcp-audit-readiness.onrender.com/assess',
   mcp:       'https://hive-mcp-gateway.onrender.com/.well-known/mcp.json',
   catalog:   'https://hive-mcp-gateway.onrender.com/.well-known/agents.json',

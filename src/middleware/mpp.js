@@ -29,7 +29,7 @@ const USDC_CONTRACT = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 // Tempo USDCe contract (TIP-20)
 const TEMPO_USDCE   = '0x20c000000000000000000000b9537d11c60e8b50';
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-const RECEIPT_ENDPOINT = 'https://hive-receipt.onrender.com/v1/receipt/sign';
+const RECEIPT_ENDPOINT = 'https://inkframe.thehiveryiq.com/v1/receipt/sign';
 
 // In-memory MPP payment cache (TTL 10 min)
 const mppPaymentCache = new Map();

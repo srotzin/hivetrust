@@ -168,7 +168,7 @@ export async function startEngagement({ did, sector = 'general', rush = false, d
     bundled_subscription_id,
     canonical_hash,
     signature,
-    pubkey_url: 'https://hivetrust.onrender.com/v1/audit/pubkey',
+    pubkey_url: 'https://hivetrust.hiveagentiq.com/v1/audit/pubkey',
     status: settlement_tx ? 'paid' : 'pending',
     next_step: settlement_tx
       ? 'Engagement intake complete. Filing kickoff email lands within 24h.'
